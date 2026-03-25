@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import {
   fetchAdminPuzzles,
   fetchAdminPuzzle,
@@ -50,21 +51,31 @@ export default function AdminPanel() {
   const [error, setError] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
 
-  // Auth check
+  // Auth check — verify Supabase session + admin role
   useEffect(() => {
-    const creds = sessionStorage.getItem('admin_credentials');
-    if (creds) {
-      setAuthenticated(true);
-      loadPuzzles();
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setAuthenticated(true);
+        loadPuzzles();
+      }
     }
+    checkAuth();
   }, []);
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     const form = e.target;
+    const email = form.email.value;
     const password = form.password.value;
-    const credentials = btoa(`admin:${password}`);
-    sessionStorage.setItem('admin_credentials', credentials);
+    setError(null);
+
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) {
+      setError(authError.message);
+      return;
+    }
+
     setAuthenticated(true);
     loadPuzzles();
   }
@@ -226,10 +237,27 @@ export default function AdminPanel() {
           >
             Admin Login
           </h1>
+          {error && (
+            <div className="p-3 rounded-tile text-[13px]" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+              {error}
+            </div>
+          )}
+          <input
+            name="email"
+            type="email"
+            placeholder="Email"
+            required
+            className="w-full px-4 py-3 rounded-tile text-[14px] outline-none"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border)',
+            }}
+          />
           <input
             name="password"
             type="password"
-            placeholder="Admin password"
+            placeholder="Password"
             required
             className="w-full px-4 py-3 rounded-tile text-[14px] outline-none"
             style={{

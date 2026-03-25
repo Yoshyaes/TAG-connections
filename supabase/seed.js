@@ -1,10 +1,21 @@
-import 'dotenv/config';
-import pg from 'pg';
-const { Pool } = pg;
+/**
+ * Seed script for TAG Connections.
+ *
+ * Usage:
+ *   1. Copy .env.example to .env and fill in SUPABASE_URL + SUPABASE_SERVICE_KEY
+ *   2. Run: node supabase/seed.js
+ *
+ * This uses the Supabase service role key to bypass RLS and insert puzzles directly.
+ */
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
+config();
+
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 const today = new Date();
 const yesterday = new Date(today);
@@ -104,23 +115,19 @@ const puzzles = [
 ];
 
 async function seed() {
-  try {
-    for (const puzzle of puzzles) {
-      await pool.query(
-        `INSERT INTO puzzles (puzzle_date, title, items, groups)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (puzzle_date) DO UPDATE
-         SET title = $2, items = $3, groups = $4`,
-        [puzzle.puzzle_date, puzzle.title, JSON.stringify(puzzle.items), JSON.stringify(puzzle.groups)]
-      );
+  for (const puzzle of puzzles) {
+    const { error } = await supabase
+      .from('puzzles')
+      .upsert(puzzle, { onConflict: 'puzzle_date' });
+
+    if (error) {
+      console.error(`Failed to seed ${puzzle.puzzle_date}:`, error.message);
+    } else {
       console.log(`Seeded puzzle for ${puzzle.puzzle_date}: "${puzzle.title}"`);
     }
-    console.log('Seeding complete!');
-  } catch (err) {
-    console.error('Seeding failed:', err);
-  } finally {
-    await pool.end();
   }
+
+  console.log('Seeding complete!');
 }
 
 seed();

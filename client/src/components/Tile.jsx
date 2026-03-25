@@ -11,6 +11,13 @@ export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) 
     }
   }, [isWrong]);
 
+  // Auto-shrink font for long text
+  const text = item.text;
+  const len = text.length;
+  let sizeClass = '';
+  if (len > 16) sizeClass = 'tag-tile-text-xs';
+  else if (len > 10) sizeClass = 'tag-tile-text-sm';
+
   return (
     <button
       onClick={() => !disabled && onToggle(item.id)}
@@ -25,7 +32,7 @@ export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) 
       {shaking && (
         <div className="absolute inset-0 rounded-tile animate-red-flash pointer-events-none" />
       )}
-      <span className="tag-tile-text">{item.text}</span>
+      <span className={`tag-tile-text ${sizeClass}`}>{text}</span>
     </button>
   );
 }

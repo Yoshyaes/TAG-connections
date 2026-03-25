@@ -112,3 +112,68 @@ body::before {
   background: var(--accent-primary);
   color: var(--text-primary);
 }
+
+/* ============================================
+   Tile styles — use !important to override
+   WordPress theme button/element styles
+   ============================================ */
+
+.tag-tile {
+  position: relative !important;
+  width: 100% !important;
+  aspect-ratio: 1.4 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 10px !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  transition: all 100ms ease-out !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  padding: 6px !important;
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border: 2px solid transparent !important;
+  box-shadow: none !important;
+  transform: scale(1) !important;
+  outline: none !important;
+  overflow: hidden !important;
+  text-decoration: none !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+}
+
+.tag-tile:hover {
+  background-color: var(--bg-surface) !important;
+}
+
+.tag-tile-selected {
+  border: 2px solid var(--accent-primary) !important;
+  box-shadow: 0 0 12px rgba(124, 77, 255, 0.4), 0 0 4px rgba(124, 77, 255, 0.2) !important;
+  transform: scale(1.03) !important;
+  background-color: #252536 !important;
+}
+
+.tag-tile-disabled {
+  cursor: default !important;
+  opacity: 0.6 !important;
+}
+
+.tag-tile-text {
+  position: relative !important;
+  z-index: 1 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  word-break: break-word !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  max-width: 100% !important;
+}

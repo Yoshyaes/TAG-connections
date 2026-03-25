@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import {
   fetchAdminPuzzles,
   fetchAdminPuzzle,
   saveAdminPuzzle,
   updateAdminPuzzle,
   deleteAdminPuzzle,
+  isAdmin,
 } from '../lib/api';
 
 const GROUP_IDS = ['A', 'B', 'C', 'D'];
@@ -39,7 +39,6 @@ function getMonthDates(year, month) {
 }
 
 export default function AdminPanel() {
-  const [authenticated, setAuthenticated] = useState(false);
   const [puzzles, setPuzzles] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [editingPuzzle, setEditingPuzzle] = useState(null);
@@ -51,34 +50,14 @@ export default function AdminPanel() {
   const [error, setError] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
 
-  // Auth check — verify Supabase session + admin role
+  // WordPress handles auth — check if user is admin via injected config
+  const authenticated = isAdmin();
+
   useEffect(() => {
-    async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setAuthenticated(true);
-        loadPuzzles();
-      }
+    if (authenticated) {
+      loadPuzzles();
     }
-    checkAuth();
-  }, []);
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    const form = e.target;
-    const email = form.email.value;
-    const password = form.password.value;
-    setError(null);
-
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) {
-      setError(authError.message);
-      return;
-    }
-
-    setAuthenticated(true);
-    loadPuzzles();
-  }
+  }, [authenticated]);
 
   async function loadPuzzles() {
     try {
@@ -226,57 +205,20 @@ export default function AdminPanel() {
         className="w-full min-h-screen flex items-center justify-center p-4"
         style={{ backgroundColor: 'var(--bg-primary)' }}
       >
-        <form
-          onSubmit={handleLogin}
-          className="w-full max-w-sm rounded-xl p-6 flex flex-col gap-4"
+        <div
+          className="w-full max-w-sm rounded-xl p-6 text-center"
           style={{ backgroundColor: 'var(--bg-surface)' }}
         >
           <h1
-            className="font-display text-[24px] font-extrabold text-center"
+            className="font-display text-[24px] font-extrabold mb-3"
             style={{ color: 'var(--text-primary)' }}
           >
-            Admin Login
+            Access Denied
           </h1>
-          {error && (
-            <div className="p-3 rounded-tile text-[13px]" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
-              {error}
-            </div>
-          )}
-          <input
-            name="email"
-            type="email"
-            placeholder="Email"
-            required
-            className="w-full px-4 py-3 rounded-tile text-[14px] outline-none"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-            }}
-          />
-          <input
-            name="password"
-            type="password"
-            placeholder="Password"
-            required
-            className="w-full px-4 py-3 rounded-tile text-[14px] outline-none"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-            }}
-          />
-          <button
-            type="submit"
-            className="w-full py-3 rounded-tile text-[14px] font-semibold"
-            style={{
-              backgroundColor: 'var(--accent-primary)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            Login
-          </button>
-        </form>
+          <p className="text-[14px]" style={{ color: 'var(--text-secondary)' }}>
+            You must be logged in as a WordPress administrator to manage puzzles.
+          </p>
+        </div>
       </div>
     );
   }

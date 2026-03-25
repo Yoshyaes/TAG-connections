@@ -4,75 +4,78 @@ A daily gaming-themed puzzle game by Two Average Gamers. Sort 16 items into 4 se
 
 ## Architecture
 
-- **Frontend:** React (Vite) + Tailwind CSS — builds to static files
-- **Backend:** Supabase (PostgreSQL + RPC functions + Auth)
-- **Hosting:** WordPress plugin embed or any static host
-- **No server required** — the frontend talks directly to Supabase
+- **Frontend:** React (Vite) + Tailwind CSS — builds to static JS/CSS
+- **Backend:** WordPress plugin (PHP) with custom REST API endpoints
+- **Database:** WordPress MySQL (custom tables via `$wpdb`)
+- **Auth:** WordPress/BuddyPress user system (cookie-based)
+- **No external services required**
 
-## Setup
-
-### 1. Supabase Project
-
-1. Create a project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor** and run the contents of `supabase/schema.sql`
-   - This creates all tables, RLS policies, and RPC functions
-3. Copy your project URL and anon key from **Settings > API**
-
-### 2. Local Development
+## Development
 
 ```bash
 npm install
-cp .env.example .env
-# Fill in VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_KEY
-npm run seed   # Seeds 3 sample puzzles
-npm run dev    # Opens at http://localhost:5173
+npm run dev    # Vite dev server at http://localhost:5173
+npm run build  # Builds to /dist
 ```
 
-### 3. Admin Setup
+## Deploying to WordPress
 
-1. Create a user in Supabase Auth (Dashboard > Authentication > Users > Add User)
-2. In the SQL Editor, mark that user as admin:
-   ```sql
-   INSERT INTO profiles (id, display_name, is_admin)
-   VALUES ('your-user-uuid', 'Fred', TRUE);
-   ```
-3. Navigate to `/admin` in the app and log in with that user's email/password
+### 1. Build the frontend
 
-## WordPress Integration
+```bash
+npm run build
+```
 
-### Install as Plugin
+### 2. Copy dist into the plugin
 
-1. Build the frontend:
-   ```bash
-   npm run build
-   ```
-2. Copy the `dist/` folder into `wordpress/`:
-   ```bash
-   cp -r dist/ wordpress/dist/
-   ```
-3. Upload the entire `wordpress/` folder to your WordPress plugins directory:
-   ```
-   wp-content/plugins/tag-connections/
-   ```
-4. Activate the **TAG Connections** plugin in WordPress admin
-5. Create a page and add the shortcode: `[tag_connections]`
+```bash
+cp -r dist/ wordpress/tag-connections/dist/
+```
 
-### How it Works
+### 3. Upload to WordPress
 
-- The plugin enqueues the built React JS/CSS on any page with the `[tag_connections]` shortcode
-- The React app mounts to a `<div>` and talks directly to your Supabase project
-- No server-side PHP processing — WordPress just serves the static assets
-- The game lives at whatever URL you put the shortcode on (e.g., `/connections`)
+Upload the `wordpress/tag-connections/` folder to your site:
 
-## Adding Puzzles
+```
+wp-content/plugins/tag-connections/
+```
 
-Use the admin panel at `/admin` (or `yoursite.com/connections#/admin` when embedded in WordPress).
+Or zip it and upload via WP admin > Plugins > Add New > Upload.
 
-Alternatively, add puzzles directly via the Supabase Dashboard table editor — insert rows into the `puzzles` table using the JSON format documented in the PRD.
+### 4. Activate
 
-## Security
+Activate **TAG Connections** in Plugins. On activation it creates 3 database tables and seeds 3 sample puzzles.
 
-- Puzzle answers are **never sent to the browser** — the `get_puzzle` RPC function strips `group_id` from items
-- Answer validation happens server-side in the `submit_guess` PostgreSQL function
-- Admin functions check `is_admin` on the `profiles` table before executing
-- All functions use `SECURITY DEFINER` to run with elevated privileges while keeping table access locked down via RLS
+### 5. Create a page
+
+Create a WordPress page (e.g. `/connections`) and add the shortcode:
+
+```
+[tag_connections]
+```
+
+## Admin Panel
+
+Access puzzle management in **two ways:**
+
+1. **WP Dashboard:** Look for "TAG Connections" in the WordPress admin sidebar
+2. **Frontend:** Visit your connections page and add `#/admin` to the URL
+
+Both use the same REST API. You must be logged in as a WordPress administrator.
+
+## How It Works
+
+- The plugin registers REST API endpoints under `/wp-json/tag-connections/v1/`
+- The React app calls these endpoints using `fetch()` with WP nonce authentication
+- Puzzle answers (`group_id`) are **never sent to the browser** — only the server knows which items belong to which group
+- Answer validation happens server-side in PHP
+- BuddyPress users who are logged in can save their scores and track streaks
+- All database queries use `$wpdb->prepare()` to prevent SQL injection
+
+## Custom Tables
+
+The plugin creates three tables (using your WordPress table prefix):
+
+- `{prefix}tag_puzzles` — daily puzzles with items and groups
+- `{prefix}tag_results` — per-user game results
+- `{prefix}tag_streaks` — streak tracking per user

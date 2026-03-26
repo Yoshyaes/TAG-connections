@@ -3,6 +3,7 @@ import Tile from './Tile';
 import GroupReveal from './GroupReveal';
 import MistakeTracker from './MistakeTracker';
 import ResultsModal from './ResultsModal';
+import Header from './Header';
 import { usePuzzle } from '../hooks/usePuzzle';
 
 export default function PuzzleGrid() {
@@ -65,6 +66,9 @@ export default function PuzzleGrid() {
 
   return (
     <div className="w-full flex flex-col items-center gap-3">
+      {/* Header with puzzle info */}
+      <Header puzzleNumber={puzzle?.id} puzzleDate={puzzle?.puzzle_date} />
+
       {/* Solved groups */}
       {solvedGroups.map((group, i) => (
         <GroupReveal key={group.id} group={group} index={i} />

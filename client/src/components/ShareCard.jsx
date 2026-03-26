@@ -39,21 +39,15 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, solved }) {
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(shareText);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareText);
+      } else if (navigator.share) {
+        await navigator.share({ text: shareText });
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for mobile
-      const textarea = document.createElement('textarea');
-      textarea.value = shareText;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopied(false);
     }
   }
 

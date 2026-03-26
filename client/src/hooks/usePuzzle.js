@@ -49,6 +49,25 @@ export function usePuzzle() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const startTimeRef = useRef(null);
+  const elapsedRef = useRef(0);
+
+  // Pause timer when tab is hidden
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.hidden) {
+        if (startTimeRef.current) {
+          elapsedRef.current += Date.now() - startTimeRef.current;
+          startTimeRef.current = null;
+        }
+      } else {
+        if (gameState === GAME_STATES.PLAYING) {
+          startTimeRef.current = Date.now();
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [gameState]);
 
   // Load puzzle on mount
   useEffect(() => {
@@ -112,8 +131,7 @@ export function usePuzzle() {
         return prev.filter(i => i !== id);
       }
       if (prev.length >= MAX_SELECTED) {
-        // Deselect oldest, add new
-        return [...prev.slice(1), id];
+        return prev;
       }
       return [...prev, id];
     });
@@ -142,8 +160,8 @@ export function usePuzzle() {
           setGameState(GAME_STATES.COMPLETE);
 
           const solveTime = startTimeRef.current
-            ? Math.round((Date.now() - startTimeRef.current) / 1000)
-            : null;
+            ? Math.round((elapsedRef.current + Date.now() - startTimeRef.current) / 1000)
+            : elapsedRef.current > 0 ? Math.round(elapsedRef.current / 1000) : null;
 
           completePuzzle({
             puzzle_date: puzzle.puzzle_date,
@@ -194,8 +212,8 @@ export function usePuzzle() {
       setGameState(GAME_STATES.FAILED);
 
       const solveTime = startTimeRef.current
-        ? Math.round((Date.now() - startTimeRef.current) / 1000)
-        : null;
+        ? Math.round((elapsedRef.current + Date.now() - startTimeRef.current) / 1000)
+        : elapsedRef.current > 0 ? Math.round(elapsedRef.current / 1000) : null;
 
       completePuzzle({
         puzzle_date: puzzle.puzzle_date,

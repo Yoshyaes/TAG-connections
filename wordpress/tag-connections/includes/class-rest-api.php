@@ -35,7 +35,9 @@ class TAG_Connections_REST_API {
         register_rest_route(self::NAMESPACE, '/puzzle/reveal', [
             'methods' => 'POST',
             'callback' => [__CLASS__, 'reveal_all_groups'],
-            'permission_callback' => '__return_true',
+            'permission_callback' => function() {
+                return is_user_logged_in();
+            },
         ]);
 
         register_rest_route(self::NAMESPACE, '/puzzle/complete', [
@@ -217,6 +219,10 @@ class TAG_Connections_REST_API {
         $solve_time_secs = isset($params['solve_time_secs']) ? (int)$params['solve_time_secs'] : null;
         $groups_order = $params['groups_order'] ?? [];
 
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $puzzle_date)) {
+            return new WP_Error('invalid', 'Invalid date format', ['status' => 400]);
+        }
+
         // Save result
         TAG_Connections_Database::save_result($user_id, [
             'puzzle_date' => $puzzle_date,
@@ -241,13 +247,13 @@ class TAG_Connections_REST_API {
             }
         }
 
-        $longest = max($new_streak, $streak->longest_streak ?? 0);
+        $longest = max($new_streak, ($streak ? $streak->longest_streak : 0));
 
         TAG_Connections_Database::update_streak($user_id, [
             'current_streak' => $new_streak,
             'longest_streak' => $longest,
             'last_played' => $puzzle_date,
-            'shield_available' => $streak->shield_available ?? true,
+            'shield_available' => $streak ? (bool)$streak->shield_available : true,
         ]);
 
         return rest_ensure_response(['saved' => true]);
@@ -268,10 +274,10 @@ class TAG_Connections_REST_API {
             'win_rate' => $played > 0 ? round(($won / $played) * 100) : 0,
             'avg_mistakes' => round((float)($stats->avg_mistakes ?? 0), 1),
             'avg_solve_time' => (int)round((float)($stats->avg_solve_time ?? 0)),
-            'current_streak' => (int)($streak->current_streak ?? 0),
-            'longest_streak' => (int)($streak->longest_streak ?? 0),
-            'last_played' => $streak->last_played ?? null,
-            'shield_available' => (bool)($streak->shield_available ?? true),
+            'current_streak' => (int)($streak ? $streak->current_streak : 0),
+            'longest_streak' => (int)($streak ? $streak->longest_streak : 0),
+            'last_played' => $streak ? $streak->last_played : null,
+            'shield_available' => $streak ? (bool)$streak->shield_available : true,
         ]);
     }
 
@@ -311,12 +317,42 @@ class TAG_Connections_REST_API {
         $items = $params['items'] ?? [];
         $groups = $params['groups'] ?? [];
 
-        // Validate
+        // Validate counts
         if (count($items) !== 16) {
             return new WP_Error('invalid', 'Must have exactly 16 items', ['status' => 400]);
         }
         if (count($groups) !== 4) {
             return new WP_Error('invalid', 'Must have exactly 4 groups', ['status' => 400]);
+        }
+
+        // Validate date format
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $puzzle_date)) {
+            return new WP_Error('invalid', 'Invalid date format', ['status' => 400]);
+        }
+
+        // Validate each group has required fields
+        $group_ids = [];
+        foreach ($groups as $group) {
+            if (empty($group['id']) || empty(trim($group['name'] ?? ''))) {
+                return new WP_Error('invalid', 'Each group must have an id and name', ['status' => 400]);
+            }
+            $group_ids[] = $group['id'];
+        }
+
+        // Validate each item has required fields and valid group reference
+        $item_texts = [];
+        foreach ($items as $item) {
+            if (empty(trim($item['text'] ?? ''))) {
+                return new WP_Error('invalid', 'Each item must have text', ['status' => 400]);
+            }
+            if (!isset($item['group_id']) || !in_array($item['group_id'], $group_ids, true)) {
+                return new WP_Error('invalid', 'Each item must reference a valid group', ['status' => 400]);
+            }
+            $lower = strtolower(trim($item['text']));
+            if (in_array($lower, $item_texts, true)) {
+                return new WP_Error('invalid', 'Duplicate item text: ' . $item['text'], ['status' => 400]);
+            }
+            $item_texts[] = $lower;
         }
 
         $result = TAG_Connections_Database::save_puzzle([

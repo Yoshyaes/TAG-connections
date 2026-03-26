@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const STREAK_KEY = 'tag_connections_streak';
 
@@ -25,7 +25,7 @@ export function useStreak() {
     localStorage.setItem(STREAK_KEY, JSON.stringify(streak));
   }, [streak]);
 
-  function recordPlay(solved) {
+  const recordPlay = useCallback(function recordPlay(solved) {
     const today = getTodayEST();
     const data = getStreakData();
 
@@ -57,7 +57,7 @@ export function useStreak() {
     setStreak(updated);
     localStorage.setItem(STREAK_KEY, JSON.stringify(updated));
     return updated;
-  }
+  }, []);
 
   return {
     currentStreak: streak.currentStreak,

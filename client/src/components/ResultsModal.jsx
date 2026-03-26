@@ -8,11 +8,12 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, solved, o
 
   useEffect(() => {
     recordPlay(solved);
-  }, []);
+  }, [solved, recordPlay]);
 
-  // Confetti on win
+  // Confetti on win (skip if user prefers reduced motion)
   useEffect(() => {
-    if (solved) {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (solved && !prefersReducedMotion) {
       import('canvas-confetti').then(({ default: confetti }) => {
         confetti({
           particleCount: 100,
@@ -44,13 +45,16 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, solved, o
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
         style={{ backgroundColor: 'rgba(15, 15, 20, 0.85)' }}
         onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-label={solved ? 'Puzzle complete' : 'Game over'}
       >
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 20, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="w-full max-w-sm rounded-xl p-6 flex flex-col items-center gap-5"
+          className="w-full max-w-sm rounded-xl p-6 flex flex-col items-center gap-5 max-h-[90vh] overflow-y-auto"
           style={{
             backgroundColor: 'var(--bg-surface)',
             backdropFilter: 'blur(12px)',

@@ -21,7 +21,16 @@ export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) 
   return (
     <button
       onClick={() => !disabled && onToggle(item.id)}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onToggle(item.id);
+        }
+      }}
       disabled={disabled}
+      role="button"
+      aria-pressed={isSelected}
+      aria-label={`${text}${isSelected ? ', selected' : ''}`}
       className={`
         tag-tile
         ${isSelected ? 'tag-tile-selected' : ''}

@@ -65,8 +65,9 @@ export default function AdminPanel() {
       setPuzzles(data);
     } catch (err) {
       if (err.message === 'Unauthorized') {
-        setAuthenticated(false);
-        sessionStorage.removeItem('admin_credentials');
+        // Admin privileges revoked — reload to reflect new state
+        window.location.reload();
+        return;
       }
       setError(err.message);
     }
@@ -288,8 +289,6 @@ export default function AdminPanel() {
 
             const hasP = puzzleDates.has(date);
             const isPast = date < today;
-            const isFuture = date > today;
-
             let bgColor = 'var(--bg-card)'; // gray default
             if (hasP) bgColor = 'rgba(34, 197, 94, 0.2)'; // green
             else if (isPast) bgColor = 'rgba(239, 68, 68, 0.15)'; // red

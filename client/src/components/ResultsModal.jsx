@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ShareCard from './ShareCard';
 import { useStreak } from '../hooks/useStreak';
+import { isLoggedIn } from '../lib/api';
 
 export default function ResultsModal({ puzzle, solvedGroups, mistakes, solved, onClose }) {
   const { recordPlay, currentStreak } = useStreak();
@@ -98,6 +99,35 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, solved, o
                 {currentStreak} day streak
               </span>
             </div>
+          )}
+
+          {/* Login prompt for anonymous users */}
+          {!isLoggedIn() && (
+            <a
+              href={(() => {
+                const apiUrl = window.tagConnections?.apiUrl || '';
+                const siteRoot = apiUrl.split('/wp-json')[0];
+                return `${siteRoot}/wp-login.php?redirect_to=${encodeURIComponent(window.location.href)}`;
+              })()}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-tile text-[13px] no-underline"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <span
+                className="font-semibold"
+                style={{ color: 'var(--accent-secondary)' }}
+              >
+                Log in to save your streak across devices
+              </span>
+              <span
+                className="ml-auto"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                &rarr;
+              </span>
+            </a>
           )}
 
           {/* Share card */}

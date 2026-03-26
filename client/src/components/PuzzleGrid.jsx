@@ -13,7 +13,6 @@ export default function PuzzleGrid() {
     selectedIds,
     solvedGroups,
     mistakes,
-    gameState,
     wrongIds,
     loading,
     error,

@@ -137,6 +137,36 @@ export function usePuzzle() {
     });
   }, [gameState]);
 
+  const handleFail = useCallback(async (finalMistakes) => {
+    try {
+      const result = await revealAllGroups(puzzle.puzzle_date);
+      // Add remaining unsolved groups
+      const solvedGroupIds = new Set(solvedGroups.map(g => g.id));
+      const remainingGroups = result.groups.filter(g => !solvedGroupIds.has(g.id));
+      const allGroups = [...solvedGroups, ...remainingGroups];
+
+      setSolvedGroups(allGroups);
+      setItems([]);
+      setSelectedIds([]);
+      setGameState(GAME_STATES.FAILED);
+
+      const solveTime = startTimeRef.current
+        ? Math.round((elapsedRef.current + Date.now() - startTimeRef.current) / 1000)
+        : elapsedRef.current > 0 ? Math.round(elapsedRef.current / 1000) : null;
+
+      completePuzzle({
+        puzzle_date: puzzle.puzzle_date,
+        solved: false,
+        mistakes: finalMistakes,
+        solve_time_secs: solveTime,
+        groups_order: allGroups.map(g => g.id),
+      }).catch(() => {});
+    } catch (err) {
+      console.error('Reveal error:', err);
+      setGameState(GAME_STATES.FAILED);
+    }
+  }, [puzzle, solvedGroups]);
+
   const submitSelection = useCallback(async () => {
     if (selectedIds.length !== MAX_SELECTED || !puzzle) return;
     if (gameState !== GAME_STATES.PLAYING) return;
@@ -196,37 +226,7 @@ export function usePuzzle() {
       console.error('Submit error:', err);
       setGameState(GAME_STATES.PLAYING);
     }
-  }, [selectedIds, puzzle, gameState, solvedGroups, mistakes]);
-
-  const handleFail = useCallback(async (finalMistakes) => {
-    try {
-      const result = await revealAllGroups(puzzle.puzzle_date);
-      // Add remaining unsolved groups
-      const solvedGroupIds = new Set(solvedGroups.map(g => g.id));
-      const remainingGroups = result.groups.filter(g => !solvedGroupIds.has(g.id));
-      const allGroups = [...solvedGroups, ...remainingGroups];
-
-      setSolvedGroups(allGroups);
-      setItems([]);
-      setSelectedIds([]);
-      setGameState(GAME_STATES.FAILED);
-
-      const solveTime = startTimeRef.current
-        ? Math.round((elapsedRef.current + Date.now() - startTimeRef.current) / 1000)
-        : elapsedRef.current > 0 ? Math.round(elapsedRef.current / 1000) : null;
-
-      completePuzzle({
-        puzzle_date: puzzle.puzzle_date,
-        solved: false,
-        mistakes: finalMistakes,
-        solve_time_secs: solveTime,
-        groups_order: allGroups.map(g => g.id),
-      }).catch(() => {});
-    } catch (err) {
-      console.error('Reveal error:', err);
-      setGameState(GAME_STATES.FAILED);
-    }
-  }, [puzzle, solvedGroups]);
+  }, [selectedIds, puzzle, gameState, solvedGroups, mistakes, handleFail]);
 
   const deselectAll = useCallback(() => {
     setSelectedIds([]);

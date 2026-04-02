@@ -76,6 +76,12 @@ class TAG_Connections_REST_API {
             'permission_callback' => [__CLASS__, 'check_admin'],
         ]);
 
+        register_rest_route(self::NAMESPACE, '/admin/schedule', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'admin_trigger_schedule'],
+            'permission_callback' => [__CLASS__, 'check_admin'],
+        ]);
+
         register_rest_route(self::NAMESPACE, '/admin/puzzle/(?P<id>\d+)', [
             'methods' => 'DELETE',
             'callback' => [__CLASS__, 'admin_delete_puzzle'],
@@ -118,6 +124,10 @@ class TAG_Connections_REST_API {
         $puzzle_date = sanitize_text_field($params['puzzle_date'] ?? current_time('Y-m-d'));
         $selected_ids = $params['selected_ids'] ?? [];
 
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $puzzle_date)) {
+            return new WP_Error('invalid', 'Invalid date format', ['status' => 400]);
+        }
+
         if (!is_array($selected_ids) || count($selected_ids) !== 4) {
             return new WP_Error('invalid', 'Must submit exactly 4 item IDs', ['status' => 400]);
         }
@@ -131,6 +141,10 @@ class TAG_Connections_REST_API {
 
         $items = json_decode($puzzle->items, true);
         $groups = json_decode($puzzle->groups_data, true);
+
+        if (!is_array($items) || !is_array($groups)) {
+            return new WP_Error('server_error', 'Invalid puzzle data', ['status' => 500]);
+        }
 
         // Find group_ids for selected items
         $group_ids = [];
@@ -181,6 +195,10 @@ class TAG_Connections_REST_API {
         $params = $request->get_json_params();
         $puzzle_date = sanitize_text_field($params['puzzle_date'] ?? current_time('Y-m-d'));
 
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $puzzle_date)) {
+            return new WP_Error('invalid', 'Invalid date format', ['status' => 400]);
+        }
+
         $puzzle = TAG_Connections_Database::get_puzzle_by_date($puzzle_date);
         if (!$puzzle) {
             return new WP_Error('not_found', 'No puzzle found', ['status' => 404]);
@@ -188,6 +206,10 @@ class TAG_Connections_REST_API {
 
         $items = json_decode($puzzle->items, true);
         $groups = json_decode($puzzle->groups_data, true);
+
+        if (!is_array($items) || !is_array($groups)) {
+            return new WP_Error('server_error', 'Invalid puzzle data', ['status' => 500]);
+        }
 
         $result_groups = [];
         foreach ($groups as $group) {
@@ -221,6 +243,12 @@ class TAG_Connections_REST_API {
 
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $puzzle_date)) {
             return new WP_Error('invalid', 'Invalid date format', ['status' => 400]);
+        }
+
+        // Verify puzzle exists before saving result
+        $puzzle = TAG_Connections_Database::get_puzzle_by_date($puzzle_date);
+        if (!$puzzle) {
+            return new WP_Error('not_found', 'No puzzle found for this date', ['status' => 404]);
         }
 
         // Save result
@@ -376,6 +404,19 @@ class TAG_Connections_REST_API {
         return rest_ensure_response(['success' => true]);
     }
 
+    public static function admin_trigger_schedule($request) {
+        $params = $request->get_json_params();
+        $days = (int)($params['days'] ?? 30);
+        $days = max(1, min($days, 60));
+
+        TAG_Connections_Scheduler::fill_upcoming_puzzles($days);
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => "Scheduled puzzles for the next {$days} days",
+        ]);
+    }
+
     // =========================================================
     // Helpers
     // =========================================================
@@ -383,6 +424,10 @@ class TAG_Connections_REST_API {
     private static function strip_answers($puzzle) {
         $items = json_decode($puzzle->items, true);
         $groups = json_decode($puzzle->groups_data, true);
+
+        if (!is_array($items) || !is_array($groups)) {
+            return ['id' => (int)$puzzle->id, 'puzzle_date' => $puzzle->puzzle_date, 'title' => $puzzle->title, 'items' => [], 'group_count' => 0];
+        }
 
         // Strip group_id from items
         $safe_items = array_map(function($item) {

@@ -7,6 +7,7 @@
     "dev": "vite --config vite.config.js",
     "build": "vite build --config vite.config.js",
     "preview": "vite preview --config vite.config.js",
+    "postbuild": "rm -rf wordpress/tag-connections/dist && cp -r dist/ wordpress/tag-connections/dist/",
     "lint": "eslint client/src",
     "test": "vitest run"
   },

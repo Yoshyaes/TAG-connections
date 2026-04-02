@@ -28,7 +28,6 @@ export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) 
         }
       }}
       disabled={disabled}
-      role="button"
       aria-pressed={isSelected}
       aria-label={`${text}${isSelected ? ', selected' : ''}`}
       className={`

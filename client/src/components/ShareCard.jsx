@@ -34,7 +34,7 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, solved }) {
     ...emojiRows,
     '',
     statusLine,
-    'Play at twaveragegamers.com/connections',
+    'Play at https://twoaveragegamers.com/connections',
   ].join('\n');
 
   async function handleCopy() {

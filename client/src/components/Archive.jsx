@@ -92,12 +92,13 @@ export default function Archive() {
           No past puzzles yet.
         </div>
       ) : (
-        <ul className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <ul className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {entries.map(entry => (
             <li key={entry.date}>
               <Link
                 to={`/archive/${entry.date}`}
-                className="flex items-center justify-between gap-3 px-3 py-3 rounded-tile transition-colors"
+                title={entry.title || 'Untitled puzzle'}
+                className="h-[72px] flex items-center justify-between gap-3 px-4 rounded-tile transition-colors"
                 style={{
                   border: '1px solid var(--border)',
                   backgroundColor: 'var(--bg-surface)',
@@ -105,8 +106,13 @@ export default function Archive() {
                   textDecoration: 'none',
                 }}
               >
-                <span className="font-semibold text-[14px]">{entry.title || 'Untitled puzzle'}</span>
-                <span className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                <span className="font-semibold text-[14px] truncate min-w-0 flex-1">
+                  {entry.title || 'Untitled puzzle'}
+                </span>
+                <span
+                  className="text-[12px] whitespace-nowrap shrink-0"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   {formatDate(entry.date)}
                 </span>
               </Link>

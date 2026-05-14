@@ -3,6 +3,7 @@ import PuzzleGrid from './components/PuzzleGrid';
 import AdminPanel from './components/AdminPanel';
 import Archive from './components/Archive';
 import ArchivePlay from './components/ArchivePlay';
+import ScrollToTop from './components/ScrollToTop';
 
 export default function App() {
   // WP admin page injects data-mode="admin" on the root div
@@ -16,6 +17,7 @@ export default function App() {
 
   return (
     <div className="w-full min-h-screen flex flex-col items-center">
+      <ScrollToTop />
       <Routes>
         <Route
           path="/"

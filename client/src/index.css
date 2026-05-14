@@ -2,7 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* All resets and globals are scoped to #tag-connections-root so this
+   stylesheet can load inside the WP /connections/ page without clobbering
+   the surrounding theme. Previously the `*` reset and `html, body` rules
+   leaked into the theme and broke its desktop nav. */
+
+#tag-connections-root {
   --bg-primary: #0F0F14;
   --bg-card: #1A1A24;
   --bg-surface: #22222E;
@@ -15,34 +20,17 @@
   --tier-blue: #3B82F6;
   --tier-purple: #A855F7;
   --tier-gold: #EAB308;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html, body {
   font-family: 'Inter', system-ui, sans-serif;
-  background-color: var(--bg-primary);
   color: var(--text-primary);
-  min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Grain texture overlay */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.02;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
+#tag-connections-root,
+#tag-connections-root *,
+#tag-connections-root *::before,
+#tag-connections-root *::after {
+  box-sizing: border-box;
 }
 
 #root {

@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchTodayPuzzle, submitGuess, revealAllGroups, completePuzzle } from '../lib/api';
+import {
+  fetchTodayPuzzle,
+  fetchPuzzleByDate,
+  submitGuess,
+  revealAllGroups,
+  completePuzzle,
+} from '../lib/api';
 
 const GAME_STATES = {
   IDLE: 'IDLE',
@@ -38,7 +44,7 @@ function shuffleArray(arr) {
   return shuffled;
 }
 
-export function usePuzzle() {
+export function usePuzzle(date = null) {
   const [puzzle, setPuzzle] = useState(null);
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -69,12 +75,19 @@ export function usePuzzle() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [gameState]);
 
-  // Load puzzle on mount
+  // Load puzzle on mount or when date changes
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
-        const data = await fetchTodayPuzzle();
+        setError(null);
+        setPuzzle(null);
+        setItems([]);
+        setSolvedGroups([]);
+        setSelectedIds([]);
+        setMistakes(0);
+        setGameState(GAME_STATES.IDLE);
+        const data = date ? await fetchPuzzleByDate(date) : await fetchTodayPuzzle();
         setPuzzle(data);
 
         // Check for saved game state
@@ -101,14 +114,14 @@ export function usePuzzle() {
 
         startTimeRef.current = Date.now();
       } catch (err) {
-        setError(err.message);
+        setError({ message: err.message, code: err.code || null, status: err.status || 0, data: err.data || null });
       } finally {
         setLoading(false);
       }
     }
 
     load();
-  }, []);
+  }, [date]);
 
   // Persist game state on changes
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Tile from './Tile';
 import GroupReveal from './GroupReveal';
 import MistakeTracker from './MistakeTracker';
@@ -6,7 +7,7 @@ import ResultsModal from './ResultsModal';
 import Header from './Header';
 import { usePuzzle } from '../hooks/usePuzzle';
 
-export default function PuzzleGrid() {
+export default function PuzzleGrid({ date = null }) {
   const {
     puzzle,
     items,
@@ -23,7 +24,7 @@ export default function PuzzleGrid() {
     isFailed,
     isPlaying,
     canSubmit,
-  } = usePuzzle();
+  } = usePuzzle(date);
 
   const [showResults, setShowResults] = useState(false);
 
@@ -49,16 +50,36 @@ export default function PuzzleGrid() {
   }
 
   if (error) {
+    const isProGated = error.code === 'pro_required' || error.status === 403;
+    const upgradeUrl = error.data?.upgrade_url || '/pricing/';
     return (
-      <div className="w-full flex items-center justify-center py-20">
-        <div
-          className="text-[15px] font-semibold text-center"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          {error === 'No puzzle available for today'
-            ? "No puzzle today — check back tomorrow!"
-            : `Error: ${error}`}
-        </div>
+      <div className="w-full flex flex-col items-center justify-center py-20 gap-4 text-center max-w-md mx-auto">
+        {isProGated ? (
+          <>
+            <div className="text-[18px] font-bold" style={{ color: 'var(--text-primary)' }}>
+              The Connections archive is a Pro feature.
+            </div>
+            <div className="text-[14px]" style={{ color: 'var(--text-secondary)' }}>
+              Upgrade to TAG Pro to replay any past puzzle.
+            </div>
+            <a
+              href={upgradeUrl}
+              className="inline-block mt-2 px-5 py-2.5 rounded-tile text-[14px] font-semibold"
+              style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--text-primary)' }}
+            >
+              See pricing
+            </a>
+            <Link to="/" className="text-[13px] underline" style={{ color: 'var(--text-secondary)' }}>
+              Back to today's puzzle
+            </Link>
+          </>
+        ) : (
+          <div className="text-[15px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+            {error.message === 'No puzzle available for today'
+              ? "No puzzle today. Check back tomorrow."
+              : `Error: ${error.message}`}
+          </div>
+        )}
       </div>
     );
   }

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useStreak } from '../hooks/useStreak';
 
 export default function Header({ puzzleNumber, puzzleDate }) {
@@ -46,6 +47,13 @@ export default function Header({ puzzleNumber, puzzleDate }) {
           </span>
         )}
       </div>
+      <Link
+        to="/archive"
+        className="text-[12px] font-semibold mt-1 underline"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        Archive
+      </Link>
     </header>
   );
 }

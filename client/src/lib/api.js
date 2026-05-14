@@ -10,6 +10,16 @@ function getConfig() {
   };
 }
 
+export class ApiError extends Error {
+  constructor(message, { code, status, data } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code || null;
+    this.status = status || 0;
+    this.data = data || null;
+  }
+}
+
 async function request(endpoint, options = {}) {
   const { apiUrl, nonce } = getConfig();
 
@@ -24,8 +34,12 @@ async function request(endpoint, options = {}) {
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.message || `HTTP ${res.status}`, {
+      code: body.code || null,
+      status: res.status,
+      data: body.data || null,
+    });
   }
 
   return res.json();
@@ -39,6 +53,10 @@ export function fetchTodayPuzzle() {
 
 export function fetchPuzzleByDate(date) {
   return request(`/puzzle/${date}`);
+}
+
+export function fetchArchiveIndex() {
+  return request('/puzzle/archive');
 }
 
 export function submitGuess(puzzleDate, selectedIds) {

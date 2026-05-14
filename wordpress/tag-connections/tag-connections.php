@@ -45,6 +45,58 @@ add_filter('script_loader_tag', ['TAG_Connections_Admin', 'add_module_type'], 10
 // Register [tag_connections] shortcode
 add_shortcode('tag_connections', 'tag_connections_shortcode');
 
+// TAG Arcade registration. tag-membership exposes tag_arcade_register_game()
+// globally; the function check guards against tag-membership being deactivated.
+add_action('plugins_loaded', function () {
+    if (!function_exists('tag_arcade_register_game')) {
+        return;
+    }
+    tag_arcade_register_game([
+        'slug'           => 'connections',
+        'title'          => 'TAG Connections',
+        'pitch'          => 'A daily gaming-themed puzzle. Sort 16 items into 4 secret categories.',
+        'play_url'       => '/connections/',
+        'required_tier'  => 'free',
+        'pro_features'   => ['archive'],
+        'stat_renderer'  => 'tag_connections_arcade_stats',
+        'featured'       => true,
+    ]);
+}, 20);
+
+/**
+ * Stat renderer for the Arcade profile tab. Returns HTML (or empty string if
+ * the user has no logged plays). Pulled stats: current streak, longest streak,
+ * total puzzles solved, win rate.
+ */
+function tag_connections_arcade_stats($user_id) {
+    $user_id = (int) $user_id;
+    if ($user_id <= 0) {
+        return '';
+    }
+    $stats = TAG_Connections_Database::get_user_stats($user_id);
+    $streak = TAG_Connections_Database::get_streak($user_id);
+
+    $played = $stats ? (int) $stats->played : 0;
+    if ($played === 0) {
+        return '';
+    }
+    $won = $stats ? (int) $stats->won : 0;
+    $winrate = $played > 0 ? round(($won / $played) * 100) : 0;
+    $current = $streak ? (int) $streak->current_streak : 0;
+    $longest = $streak ? (int) $streak->longest_streak : 0;
+
+    ob_start();
+    ?>
+    <div class="tag-arcade-stats tag-arcade-stats--connections">
+        <div class="tag-arcade-stat"><span class="tag-arcade-stat__value"><?php echo esc_html((string) $current); ?></span><span class="tag-arcade-stat__label">Current streak</span></div>
+        <div class="tag-arcade-stat"><span class="tag-arcade-stat__value"><?php echo esc_html((string) $longest); ?></span><span class="tag-arcade-stat__label">Longest streak</span></div>
+        <div class="tag-arcade-stat"><span class="tag-arcade-stat__value"><?php echo esc_html((string) $won); ?></span><span class="tag-arcade-stat__label">Solved</span></div>
+        <div class="tag-arcade-stat"><span class="tag-arcade-stat__value"><?php echo esc_html($winrate . '%'); ?></span><span class="tag-arcade-stat__label">Win rate</span></div>
+    </div>
+    <?php
+    return (string) ob_get_clean();
+}
+
 function tag_connections_shortcode($atts) {
     $plugin_url = TAG_CONNECTIONS_URL;
     $dist_dir = TAG_CONNECTIONS_PATH . 'dist/assets/';

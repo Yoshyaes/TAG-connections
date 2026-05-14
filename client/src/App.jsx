@@ -1,6 +1,8 @@
 import { Routes, Route } from 'react-router-dom';
 import PuzzleGrid from './components/PuzzleGrid';
 import AdminPanel from './components/AdminPanel';
+import Archive from './components/Archive';
+import ArchivePlay from './components/ArchivePlay';
 
 export default function App() {
   // WP admin page injects data-mode="admin" on the root div
@@ -23,6 +25,8 @@ export default function App() {
             </div>
           }
         />
+        <Route path="/archive" element={<Archive />} />
+        <Route path="/archive/:date" element={<ArchivePlay />} />
         <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </div>

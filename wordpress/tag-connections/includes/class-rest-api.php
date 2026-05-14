@@ -26,6 +26,12 @@ class TAG_Connections_REST_API {
             ],
         ]);
 
+        register_rest_route(self::NAMESPACE, '/puzzle/archive', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_archive_index'],
+            'permission_callback' => '__return_true',
+        ]);
+
         register_rest_route(self::NAMESPACE, '/puzzle/submit', [
             'methods' => 'POST',
             'callback' => [__CLASS__, 'submit_guess'],
@@ -108,8 +114,61 @@ class TAG_Connections_REST_API {
         return rest_ensure_response(self::strip_answers($puzzle));
     }
 
+    /**
+     * Public archive index. Returns puzzle dates older than today, plus a
+     * boolean flagging whether the caller has Pro access. The puzzle dates
+     * themselves are not gated, only the puzzle CONTENT (handled in
+     * get_puzzle_by_date). This lets the UI list archive entries even to
+     * free users and show an upsell on click.
+     */
+    public static function get_archive_index($request) {
+        $today = current_time('Y-m-d');
+        global $wpdb;
+        $table = $wpdb->prefix . 'tag_puzzles';
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT puzzle_date, title FROM $table WHERE puzzle_date < %s ORDER BY puzzle_date DESC LIMIT 60",
+            $today
+        ));
+
+        $entries = [];
+        foreach ((array) $rows as $row) {
+            $entries[] = [
+                'date'  => (string) $row->puzzle_date,
+                'title' => (string) $row->title,
+            ];
+        }
+
+        $can_play_past = function_exists('tag_arcade_user_can_play')
+            ? (bool) tag_arcade_user_can_play('pro')
+            : false;
+
+        return rest_ensure_response([
+            'entries'      => $entries,
+            'pro_required' => !$can_play_past,
+            'upgrade_url'  => function_exists('home_url') ? home_url('/pricing/') : null,
+        ]);
+    }
+
     public static function get_puzzle_by_date($request) {
         $date = $request['date'];
+
+        // Pro archive gate: any date older than today is Pro-only. Today and
+        // future dates remain free. Falls open if tag-membership isn't loaded
+        // (e.g. plugin deactivated) so the game keeps working in isolation.
+        $today = current_time('Y-m-d');
+        if ($date < $today && function_exists('tag_arcade_user_can_play')) {
+            if (!tag_arcade_user_can_play('pro')) {
+                return new WP_Error(
+                    'pro_required',
+                    'The Connections archive is a Pro feature. Upgrade to play past puzzles.',
+                    [
+                        'status'      => 403,
+                        'upgrade_url' => function_exists('home_url') ? home_url('/pricing/') : null,
+                    ]
+                );
+            }
+        }
+
         $puzzle = TAG_Connections_Database::get_puzzle_by_date($date);
 
         if (!$puzzle) {

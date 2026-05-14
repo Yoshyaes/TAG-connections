@@ -5,6 +5,24 @@ class TAG_Connections_REST_API {
 
     const NAMESPACE = 'tag-connections/v1';
 
+    // Per-user/per-IP transient buckets. Mirrors Rank Arena's pattern from the
+    // 2026-04-08 audit — see plugins/rank-arena/includes/class-rest-api.php.
+    const SUBMIT_RATE_LIMIT = 30; // per 60s, /puzzle/submit + /puzzle/complete
+    const REVEAL_RATE_LIMIT = 60; // per 60s, /puzzle/reveal
+
+    /** Cheap per-user/per-IP rate limiter using transients. */
+    private static function rate_limit($key_suffix, $max_per_minute) {
+        $uid = get_current_user_id();
+        $ip  = isset($_SERVER['REMOTE_ADDR']) ? preg_replace('/[^0-9a-fA-F:.]/', '', $_SERVER['REMOTE_ADDR']) : '0';
+        $bucket = 'tc_rl_' . $key_suffix . '_' . ($uid ?: 'a' . $ip);
+        $hits = (int) get_transient($bucket);
+        if ($hits >= $max_per_minute) {
+            return new WP_Error('rate_limited', 'Too many requests, slow down.', ['status' => 429]);
+        }
+        set_transient($bucket, $hits + 1, 60);
+        return true;
+    }
+
     public static function register_routes() {
         // --- Public game endpoints ---
         register_rest_route(self::NAMESPACE, '/puzzle/today', [
@@ -179,6 +197,9 @@ class TAG_Connections_REST_API {
     }
 
     public static function submit_guess($request) {
+        $rl = self::rate_limit('submit', self::SUBMIT_RATE_LIMIT);
+        if (is_wp_error($rl)) return $rl;
+
         $params = $request->get_json_params();
         $puzzle_date = sanitize_text_field($params['puzzle_date'] ?? current_time('Y-m-d'));
         $selected_ids = $params['selected_ids'] ?? [];
@@ -251,6 +272,9 @@ class TAG_Connections_REST_API {
     }
 
     public static function reveal_all_groups($request) {
+        $rl = self::rate_limit('reveal', self::REVEAL_RATE_LIMIT);
+        if (is_wp_error($rl)) return $rl;
+
         $params = $request->get_json_params();
         $puzzle_date = sanitize_text_field($params['puzzle_date'] ?? current_time('Y-m-d'));
 
@@ -291,6 +315,9 @@ class TAG_Connections_REST_API {
     }
 
     public static function complete_puzzle($request) {
+        $rl = self::rate_limit('complete', self::SUBMIT_RATE_LIMIT);
+        if (is_wp_error($rl)) return $rl;
+
         $user_id = get_current_user_id();
         $params = $request->get_json_params();
 

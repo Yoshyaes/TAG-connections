@@ -139,13 +139,5 @@ function tag_connections_shortcode($atts) {
         ]);
     }
 
-    // Google Fonts
-    wp_enqueue_style(
-        'tag-connections-fonts',
-        'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@700;800&display=swap',
-        [],
-        null
-    );
-
     return '<div id="tag-connections-root" style="max-width: 480px; margin: 0 auto;"></div>';
 }

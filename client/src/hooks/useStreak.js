@@ -18,8 +18,23 @@ function getTodayEST() {
     .split('T')[0];
 }
 
+// A streak is only "alive" if the user played today or yesterday. Without
+// this check, a streak from N days ago would keep displaying as active
+// (e.g. "🔥 5 day streak") on every page load until the user plays again —
+// the same read-time staleness bug fixed server-side in the other TAG
+// arcade games' streak displays.
+function isStreakAlive(lastPlayed) {
+  if (!lastPlayed) return false;
+  const today = getTodayEST();
+  const yesterday = new Date(new Date(today).getTime() - 86400000).toISOString().split('T')[0];
+  return lastPlayed === today || lastPlayed === yesterday;
+}
+
 export function useStreak() {
-  const [streak, setStreak] = useState(getStreakData);
+  const [streak, setStreak] = useState(() => {
+    const data = getStreakData();
+    return isStreakAlive(data.lastPlayed) ? data : { ...data, currentStreak: 0 };
+  });
 
   useEffect(() => {
     localStorage.setItem(STREAK_KEY, JSON.stringify(streak));

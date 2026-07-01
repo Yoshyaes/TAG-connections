@@ -14,12 +14,12 @@ export default function MistakeTracker({ mistakes, maxMistakes = 4 }) {
           <div
             key={i}
             className="w-3 h-3 rounded-full transition-all duration-300"
-            style={{
-              backgroundColor: i < remaining
-                ? 'var(--text-primary)'
-                : 'var(--border)',
-              opacity: i < remaining ? 1 : 0.3,
-            }}
+            style={i < remaining
+              ? { backgroundColor: 'var(--text-primary)', opacity: 1 }
+              // Spent dots stay legible as a distinct "used" ring instead of
+              // fading to near-invisible against the background.
+              : { backgroundColor: 'transparent', border: '1.5px solid var(--text-secondary)', opacity: 0.7 }
+            }
           />
         ))}
       </div>

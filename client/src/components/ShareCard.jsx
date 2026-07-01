@@ -8,7 +8,7 @@ const COLOR_EMOJI = {
 };
 
 export default function ShareCard({ puzzle, solvedGroups, mistakes, solved }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState('idle'); // idle | copied | shared | error
 
   const puzzleNumber = puzzle?.id || '?';
   const date = puzzle?.puzzle_date
@@ -38,17 +38,31 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, solved }) {
   ].join('\n');
 
   async function handleCopy() {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
         await navigator.clipboard.writeText(shareText);
-      } else if (navigator.share) {
-        await navigator.share({ text: shareText });
+        setCopyState('copied');
+      } catch {
+        setCopyState('error');
       }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
+      setTimeout(() => setCopyState('idle'), 2000);
+      return;
     }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: shareText });
+        setCopyState('shared');
+        setTimeout(() => setCopyState('idle'), 2000);
+      } catch {
+        // Thrown when the user just closes the native share sheet — not a
+        // failure, so no error state.
+      }
+      return;
+    }
+
+    setCopyState('error');
+    setTimeout(() => setCopyState('idle'), 2000);
   }
 
   return (
@@ -70,12 +84,19 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, solved }) {
         onClick={handleCopy}
         className="px-8 py-3 rounded-tile text-[14px] font-semibold transition-all duration-150"
         style={{
-          backgroundColor: copied ? 'var(--tier-green)' : 'var(--accent-primary)',
-          color: copied ? '#0F0F14' : 'var(--text-primary)',
+          backgroundColor: copyState === 'copied' || copyState === 'shared' ? 'var(--tier-green)' : 'var(--accent-primary)',
+          color: copyState === 'copied' || copyState === 'shared' ? '#0F0F14' : 'var(--text-primary)',
         }}
       >
-        {copied ? 'Copied!' : 'Share Results'}
+        {copyState === 'copied' ? 'Copied!'
+          : copyState === 'shared' ? 'Shared!'
+          : 'Share Results'}
       </button>
+      {copyState === 'error' && (
+        <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+          Couldn't copy automatically — select the text above and copy it manually.
+        </p>
+      )}
     </div>
   );
 }

@@ -4,8 +4,36 @@ import Tile from './Tile';
 import GroupReveal from './GroupReveal';
 import MistakeTracker from './MistakeTracker';
 import ResultsModal from './ResultsModal';
+import RulesModal from './RulesModal';
 import Header from './Header';
 import { usePuzzle } from '../hooks/usePuzzle';
+
+const RULES_SEEN_KEY = 'tag_connections_seen_rules';
+
+function msUntilNextEstMidnight() {
+  const now = new Date();
+  const nowEst = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const nextMidnightEst = new Date(nowEst);
+  nextMidnightEst.setHours(24, 0, 0, 0);
+  return nextMidnightEst.getTime() - nowEst.getTime();
+}
+
+function formatCountdown(ms) {
+  const totalSecs = Math.max(0, Math.floor(ms / 1000));
+  const h = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+  const m = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+  const s = String(totalSecs % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+function useNextPuzzleCountdown() {
+  const [remainingMs, setRemainingMs] = useState(msUntilNextEstMidnight);
+  useEffect(() => {
+    const id = setInterval(() => setRemainingMs(msUntilNextEstMidnight()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return formatCountdown(remainingMs);
+}
 
 export default function PuzzleGrid({ date = null }) {
   const {
@@ -15,6 +43,7 @@ export default function PuzzleGrid({ date = null }) {
     solvedGroups,
     mistakes,
     wrongIds,
+    oneAway,
     loading,
     error,
     toggleTile,
@@ -27,6 +56,8 @@ export default function PuzzleGrid({ date = null }) {
   } = usePuzzle(date);
 
   const [showResults, setShowResults] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const countdown = useNextPuzzleCountdown();
 
   // Show results modal when game ends
   useEffect(() => {
@@ -35,6 +66,15 @@ export default function PuzzleGrid({ date = null }) {
       return () => clearTimeout(timer);
     }
   }, [isComplete, isFailed]);
+
+  // First-time visitors get the rules automatically; everyone else can
+  // reopen them via the "?" button.
+  useEffect(() => {
+    if (!loading && !localStorage.getItem(RULES_SEEN_KEY)) {
+      setShowRules(true);
+      localStorage.setItem(RULES_SEEN_KEY, '1');
+    }
+  }, [loading]);
 
   if (loading) {
     return (
@@ -89,10 +129,31 @@ export default function PuzzleGrid({ date = null }) {
       {/* Header with puzzle info */}
       <Header puzzleNumber={puzzle?.id} puzzleDate={puzzle?.puzzle_date} />
 
+      <button
+        onClick={() => setShowRules(true)}
+        className="text-[12px] font-semibold -mt-2 underline"
+        style={{ color: 'var(--text-secondary)' }}
+        aria-label="How to play"
+      >
+        How to play
+      </button>
+
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+
       {/* Solved groups */}
       {solvedGroups.map((group, i) => (
         <GroupReveal key={group.id} group={group} index={i} />
       ))}
+
+      {/* Near-miss toast: exactly 3 of 4 selected items shared a group */}
+      {oneAway && (
+        <div
+          className="px-4 py-1.5 rounded-tile text-[13px] font-semibold animate-pulse"
+          style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--text-primary)' }}
+        >
+          One away!
+        </div>
+      )}
 
       {/* Tile grid */}
       {items.length > 0 && (
@@ -142,6 +203,23 @@ export default function PuzzleGrid({ date = null }) {
           >
             Submit
           </button>
+        </div>
+      )}
+
+      {/* Post-game state: the results modal gets dismissed with no other way
+          back in and no sense of when the next puzzle arrives. */}
+      {(isComplete || isFailed) && !showResults && (
+        <div className="w-full flex flex-col items-center gap-2 mt-2">
+          <button
+            onClick={() => setShowResults(true)}
+            className="px-6 py-2.5 rounded-tile text-[14px] font-semibold transition-all duration-150"
+            style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--text-primary)' }}
+          >
+            {isComplete ? 'Solved' : 'Game Over'} &middot; View results
+          </button>
+          <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+            Next puzzle in {countdown}
+          </p>
         </div>
       )}
 

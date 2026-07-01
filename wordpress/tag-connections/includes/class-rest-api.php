@@ -59,9 +59,13 @@ class TAG_Connections_REST_API {
         register_rest_route(self::NAMESPACE, '/puzzle/reveal', [
             'methods' => 'POST',
             'callback' => [__CLASS__, 'reveal_all_groups'],
-            'permission_callback' => function() {
-                return is_user_logged_in();
-            },
+            // Public: the reveal is the same answer key every player sees
+            // after failing, logged in or not. Gating this behind login meant
+            // anonymous players who lost got no group reveal at all (they'd
+            // just see a blank failed state), since /puzzle/complete (which
+            // IS user-specific and stays login-gated) was the only other call
+            // in the fail path and it 403s for them too.
+            'permission_callback' => '__return_true',
         ]);
 
         register_rest_route(self::NAMESPACE, '/puzzle/complete', [
@@ -268,7 +272,13 @@ class TAG_Connections_REST_API {
             ]);
         }
 
-        return rest_ensure_response(['correct' => false]);
+        // "One away": exactly 3 of the 4 selected items share the same group.
+        // A genre-standard near-miss cue (from the original NYT Connections)
+        // that players expect but this game never surfaced.
+        $counts = array_count_values($group_ids);
+        $one_away = !empty($counts) && max($counts) === 3;
+
+        return rest_ensure_response(['correct' => false, 'one_away' => $one_away]);
     }
 
     public static function reveal_all_groups($request) {

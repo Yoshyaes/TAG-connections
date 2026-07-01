@@ -24,6 +24,8 @@ export default [
         sessionStorage: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
         console: 'readonly',
         URLSearchParams: 'readonly',
         fetch: 'readonly',

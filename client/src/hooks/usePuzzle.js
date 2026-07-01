@@ -5,6 +5,7 @@ import {
   submitGuess,
   revealAllGroups,
   completePuzzle,
+  isLoggedIn,
 } from '../lib/api';
 
 const GAME_STATES = {
@@ -52,6 +53,7 @@ export function usePuzzle(date = null) {
   const [mistakes, setMistakes] = useState(0);
   const [gameState, setGameState] = useState(GAME_STATES.IDLE);
   const [wrongIds, setWrongIds] = useState([]);
+  const [oneAway, setOneAway] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const startTimeRef = useRef(null);
@@ -167,13 +169,15 @@ export function usePuzzle(date = null) {
         ? Math.round((elapsedRef.current + Date.now() - startTimeRef.current) / 1000)
         : elapsedRef.current > 0 ? Math.round(elapsedRef.current / 1000) : null;
 
-      completePuzzle({
-        puzzle_date: puzzle.puzzle_date,
-        solved: false,
-        mistakes: finalMistakes,
-        solve_time_secs: solveTime,
-        groups_order: allGroups.map(g => g.id),
-      }).catch(() => {});
+      if (isLoggedIn()) {
+        completePuzzle({
+          puzzle_date: puzzle.puzzle_date,
+          solved: false,
+          mistakes: finalMistakes,
+          solve_time_secs: solveTime,
+          groups_order: allGroups.map(g => g.id),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('Reveal error:', err);
       setGameState(GAME_STATES.FAILED);
@@ -206,13 +210,15 @@ export function usePuzzle(date = null) {
             ? Math.round((elapsedRef.current + Date.now() - startTimeRef.current) / 1000)
             : elapsedRef.current > 0 ? Math.round(elapsedRef.current / 1000) : null;
 
-          completePuzzle({
-            puzzle_date: puzzle.puzzle_date,
-            solved: true,
-            mistakes,
-            solve_time_secs: solveTime,
-            groups_order: newSolvedGroups.map(g => g.id),
-          }).catch(() => {});
+          if (isLoggedIn()) {
+            completePuzzle({
+              puzzle_date: puzzle.puzzle_date,
+              solved: true,
+              mistakes,
+              solve_time_secs: solveTime,
+              groups_order: newSolvedGroups.map(g => g.id),
+            }).catch(() => {});
+          }
 
           return;
         }
@@ -221,11 +227,13 @@ export function usePuzzle(date = null) {
       } else {
         // Wrong guess
         setWrongIds([...selectedIds]);
+        setOneAway(!!result.one_away);
         const newMistakes = mistakes + 1;
         setMistakes(newMistakes);
 
         setTimeout(() => {
           setWrongIds([]);
+          setOneAway(false);
           setSelectedIds([]);
 
           if (newMistakes >= MAX_MISTAKES) {
@@ -233,7 +241,7 @@ export function usePuzzle(date = null) {
           } else {
             setGameState(GAME_STATES.PLAYING);
           }
-        }, 500);
+        }, result.one_away ? 1500 : 500);
       }
     } catch (err) {
       console.error('Submit error:', err);
@@ -253,6 +261,7 @@ export function usePuzzle(date = null) {
     mistakes,
     gameState,
     wrongIds,
+    oneAway,
     loading,
     error,
     toggleTile,

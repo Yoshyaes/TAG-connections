@@ -74,7 +74,7 @@ export default function Archive() {
           <div className="flex flex-col">
             <strong style={{ color: 'var(--text-primary)' }}>Pro only</strong>
             <span className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-              Unlock the full archive for $12/mo.
+              Upgrade to TAG Pro to replay any past puzzle.
             </span>
           </div>
           <a

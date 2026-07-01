@@ -11,6 +11,8 @@ class TAG_Connections_Scheduler {
 
     const CRON_HOOK = 'tag_connections_auto_schedule';
     const POOL_OPTION = 'tag_connections_used_pool_ids';
+    const RECYCLED_OPTION = 'tag_connections_pool_recycled_at';
+    const STATUS_TRANSIENT = 'tag_connections_queue_status';
 
     /**
      * Register the daily cron event if not already scheduled.
@@ -57,16 +59,16 @@ class TAG_Connections_Scheduler {
                 }
             }
 
-            // If all puzzles used, reset the pool and start over
+            // Pool exhausted: recycle as a last resort so the daily puzzle
+            // never goes dark, but record it so the health check alerts.
+            // Players WILL see repeats from this point until fresh puzzles land.
             if (!$puzzle_data) {
+                update_option(self::RECYCLED_OPTION, current_time('mysql'));
                 $used_ids = [];
-                update_option(self::POOL_OPTION, $used_ids);
                 foreach ($pool as $index => $p) {
-                    if (!in_array($index, $used_ids, true)) {
-                        $puzzle_data = $p;
-                        $used_ids[] = $index;
-                        break;
-                    }
+                    $puzzle_data = $p;
+                    $used_ids[] = $index;
+                    break;
                 }
             }
 
@@ -81,6 +83,7 @@ class TAG_Connections_Scheduler {
         }
 
         update_option(self::POOL_OPTION, $used_ids);
+        delete_transient(self::STATUS_TRANSIENT);
     }
 
     /**
@@ -89,5 +92,58 @@ class TAG_Connections_Scheduler {
      */
     public static function seed_initial($days = 30) {
         self::fill_upcoming_puzzles($days);
+    }
+
+    /**
+     * Queue health snapshot. Runway counts both already-scheduled future
+     * puzzles and unused pool entries (which the cron will seed); once the
+     * pool is dry the scheduler recycles, so runway hitting zero means
+     * players start seeing repeats.
+     */
+    public static function queue_status() {
+        global $wpdb;
+        require_once TAG_CONNECTIONS_PATH . 'includes/puzzle-content.php';
+
+        $table = $wpdb->prefix . 'tag_puzzles';
+        $today = current_time('Y-m-d');
+
+        $future_days = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE puzzle_date > %s", $today
+        ));
+
+        $pool_size = count(tag_connections_get_puzzle_pool());
+        $used_ids = get_option(self::POOL_OPTION, []);
+        $pool_unused = max(0, $pool_size - count((array) $used_ids));
+
+        // First calendar date with no puzzle row (the next gap the cron fills).
+        $next_unfilled = '';
+        for ($i = 0; $i <= $future_days + 1; $i++) {
+            $date = date('Y-m-d', strtotime($today . " +{$i} day"));
+            if (!TAG_Connections_Database::get_puzzle_by_date($date)) {
+                $next_unfilled = $date;
+                break;
+            }
+        }
+
+        $status = [
+            'future_days'   => $future_days,
+            'pool_size'     => $pool_size,
+            'pool_unused'   => $pool_unused,
+            'runway_days'   => $future_days + $pool_unused,
+            'next_unfilled' => $next_unfilled,
+            'recycled_at'   => (string) get_option(self::RECYCLED_OPTION, ''),
+            'checked_at'    => current_time('mysql'),
+        ];
+
+        set_transient(self::STATUS_TRANSIENT, $status, HOUR_IN_SECONDS);
+        return $status;
+    }
+
+    /**
+     * Cached variant for hot paths (admin_notices runs on every wp-admin load).
+     */
+    public static function queue_status_cached() {
+        $status = get_transient(self::STATUS_TRANSIENT);
+        return is_array($status) ? $status : self::queue_status();
     }
 }

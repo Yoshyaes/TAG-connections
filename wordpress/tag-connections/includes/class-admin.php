@@ -66,7 +66,30 @@ class TAG_Connections_Admin {
         );
 
         echo '<div class="wrap">';
+        self::render_queue_widget();
         echo '<div id="tag-connections-root" data-mode="admin" style="max-width: 1200px;"></div>';
+        echo '</div>';
+    }
+
+    /**
+     * Queue health summary above the puzzle editor. Always computed fresh
+     * here (this page is where you act on it).
+     */
+    private static function render_queue_widget() {
+        $status = TAG_Connections_Scheduler::queue_status();
+        $low = $status['runway_days'] < TAG_Connections_Health::RUNWAY_THRESHOLD_DAYS;
+
+        echo '<div style="max-width: 1200px; margin: 12px 0; padding: 12px 16px; background: #fff; border: 1px solid #c3c4c7; border-left: 4px solid ' . ($low ? '#d63638' : '#00a32a') . ';">';
+        echo '<h2 style="margin: 0 0 8px; font-size: 14px;">Puzzle queue health</h2>';
+        echo '<table class="widefat striped" style="max-width: 640px;">';
+        echo '<tbody>';
+        echo '<tr><td><strong>Fresh runway</strong></td><td>' . (int) $status['runway_days'] . ' days' . ($low ? ' <span style="color:#d63638;font-weight:600;">(LOW, add puzzles below)</span>' : '') . '</td></tr>';
+        echo '<tr><td>Scheduled future puzzles</td><td>' . (int) $status['future_days'] . '</td></tr>';
+        echo '<tr><td>Unused pool puzzles</td><td>' . (int) $status['pool_unused'] . ' of ' . (int) $status['pool_size'] . '</td></tr>';
+        echo '<tr><td>Next unfilled date</td><td>' . esc_html($status['next_unfilled'] !== '' ? $status['next_unfilled'] : 'none in window') . '</td></tr>';
+        echo '<tr><td>Pool last recycled</td><td>' . esc_html($status['recycled_at'] !== '' ? $status['recycled_at'] : 'never recorded') . '</td></tr>';
+        echo '</tbody></table>';
+        echo '<p style="margin: 8px 0 0; color: #646970;">When the pool runs dry the scheduler recycles old puzzles rather than going dark, and players see repeats. Keep the runway above ' . (int) TAG_Connections_Health::RUNWAY_THRESHOLD_DAYS . ' days.</p>';
         echo '</div>';
     }
 

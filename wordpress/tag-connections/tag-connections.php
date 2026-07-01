@@ -20,6 +20,7 @@ require_once TAG_CONNECTIONS_PATH . 'includes/class-database.php';
 require_once TAG_CONNECTIONS_PATH . 'includes/class-rest-api.php';
 require_once TAG_CONNECTIONS_PATH . 'includes/class-admin.php';
 require_once TAG_CONNECTIONS_PATH . 'includes/class-scheduler.php';
+require_once TAG_CONNECTIONS_PATH . 'includes/class-health.php';
 
 // Activation: create tables + seed puzzles for next 30 days
 register_activation_hook(__FILE__, function() {
@@ -30,8 +31,9 @@ register_activation_hook(__FILE__, function() {
 // Deactivation: clean up cron
 register_deactivation_hook(__FILE__, ['TAG_Connections_Scheduler', 'deactivate']);
 
-// Initialize daily auto-scheduler
+// Initialize daily auto-scheduler + queue health monitoring
 TAG_Connections_Scheduler::init();
+TAG_Connections_Health::init();
 
 // Register REST API routes
 add_action('rest_api_init', ['TAG_Connections_REST_API', 'register_routes']);

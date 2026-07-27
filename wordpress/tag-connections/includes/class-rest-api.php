@@ -59,13 +59,9 @@ class TAG_Connections_REST_API {
         register_rest_route(self::NAMESPACE, '/puzzle/reveal', [
             'methods' => 'POST',
             'callback' => [__CLASS__, 'reveal_all_groups'],
-            // Public: the reveal is the same answer key every player sees
-            // after failing, logged in or not. Gating this behind login meant
-            // anonymous players who lost got no group reveal at all (they'd
-            // just see a blank failed state), since /puzzle/complete (which
-            // IS user-specific and stays login-gated) was the only other call
-            // in the fail path and it 403s for them too.
-            'permission_callback' => '__return_true',
+            'permission_callback' => function() {
+                return is_user_logged_in();
+            },
         ]);
 
         register_rest_route(self::NAMESPACE, '/puzzle/complete', [
@@ -272,13 +268,7 @@ class TAG_Connections_REST_API {
             ]);
         }
 
-        // "One away": exactly 3 of the 4 selected items share the same group.
-        // A genre-standard near-miss cue (from the original NYT Connections)
-        // that players expect but this game never surfaced.
-        $counts = array_count_values($group_ids);
-        $one_away = !empty($counts) && max($counts) === 3;
-
-        return rest_ensure_response(['correct' => false, 'one_away' => $one_away]);
+        return rest_ensure_response(['correct' => false]);
     }
 
     public static function reveal_all_groups($request) {
@@ -359,13 +349,20 @@ class TAG_Connections_REST_API {
         // Update streak
         $streak = TAG_Connections_Database::get_streak($user_id);
         $yesterday = date('Y-m-d', strtotime($puzzle_date . ' -1 day'));
+        $day_before_yesterday = date('Y-m-d', strtotime($puzzle_date . ' -2 days'));
 
         $new_streak = 0;
+        $shield_consumed = false;
         if ($solved) {
             if ($streak && $streak->last_played === $yesterday) {
                 $new_streak = ($streak->current_streak ?? 0) + 1;
             } elseif ($streak && $streak->last_played === $puzzle_date) {
                 $new_streak = $streak->current_streak ?? 1;
+            } elseif ($streak && $streak->last_played === $day_before_yesterday && $streak->shield_available) {
+                // Exactly one day was missed and a shield is available: consume it to
+                // bridge the gap instead of resetting the streak to 1.
+                $new_streak = ($streak->current_streak ?? 0) + 1;
+                $shield_consumed = true;
             } else {
                 $new_streak = 1;
             }
@@ -377,10 +374,10 @@ class TAG_Connections_REST_API {
             'current_streak' => $new_streak,
             'longest_streak' => $longest,
             'last_played' => $puzzle_date,
-            'shield_available' => $streak ? (bool)$streak->shield_available : true,
+            'shield_available' => $shield_consumed ? false : ($streak ? (bool)$streak->shield_available : true),
         ]);
 
-        return rest_ensure_response(['saved' => true]);
+        return rest_ensure_response(['saved' => true, 'shield_consumed' => $shield_consumed]);
     }
 
     public static function get_user_stats($request) {

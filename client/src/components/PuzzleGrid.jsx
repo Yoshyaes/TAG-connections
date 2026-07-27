@@ -42,6 +42,7 @@ export default function PuzzleGrid({ date = null }) {
     selectedIds,
     solvedGroups,
     mistakes,
+    guessHistory,
     wrongIds,
     oneAway,
     loading,
@@ -229,6 +230,7 @@ export default function PuzzleGrid({ date = null }) {
           puzzle={puzzle}
           solvedGroups={solvedGroups}
           mistakes={mistakes}
+          guessHistory={guessHistory}
           solved={isComplete}
           onClose={() => setShowResults(false)}
         />

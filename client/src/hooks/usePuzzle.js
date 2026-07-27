@@ -16,7 +16,7 @@ const GAME_STATES = {
   FAILED: 'FAILED',
 };
 
-const MAX_MISTAKES = 4;
+export const MAX_MISTAKES = 4;
 const MAX_SELECTED = 4;
 
 function getStorageKey(date) {
@@ -51,6 +51,14 @@ export function usePuzzle(date = null) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [solvedGroups, setSolvedGroups] = useState([]);
   const [mistakes, setMistakes] = useState(0);
+  // One entry per submission attempt, correct or wrong, in the order they
+  // happened — this is what lets the share grid show "the mistakes are the
+  // story" instead of just the 4 solved groups. Only raw item ids + outcome
+  // are recorded here; color resolution happens later (ShareCard), once
+  // every group's true membership is known (win: all 4 solved; loss: the
+  // reveal-all-groups response), so nothing about a wrong guess's true
+  // group is exposed to the client any earlier than it already is today.
+  const [guessHistory, setGuessHistory] = useState([]);
   const [gameState, setGameState] = useState(GAME_STATES.IDLE);
   const [wrongIds, setWrongIds] = useState([]);
   const [oneAway, setOneAway] = useState(false);
@@ -88,6 +96,7 @@ export function usePuzzle(date = null) {
         setSolvedGroups([]);
         setSelectedIds([]);
         setMistakes(0);
+        setGuessHistory([]);
         setGameState(GAME_STATES.IDLE);
         const data = date ? await fetchPuzzleByDate(date) : await fetchTodayPuzzle();
         setPuzzle(data);
@@ -99,6 +108,7 @@ export function usePuzzle(date = null) {
             setItems(saved.items || []);
             setSolvedGroups(saved.solvedGroups || []);
             setMistakes(saved.mistakes || 0);
+            setGuessHistory(saved.guessHistory || []);
             setGameState(saved.gameState);
             setLoading(false);
             return;
@@ -107,6 +117,7 @@ export function usePuzzle(date = null) {
           setItems(saved.items || shuffleArray(data.items));
           setSolvedGroups(saved.solvedGroups || []);
           setMistakes(saved.mistakes || 0);
+          setGuessHistory(saved.guessHistory || []);
           setSelectedIds(saved.selectedIds || []);
           setGameState(GAME_STATES.PLAYING);
         } else {
@@ -133,10 +144,11 @@ export function usePuzzle(date = null) {
         selectedIds,
         solvedGroups,
         mistakes,
+        guessHistory,
         gameState,
       });
     }
-  }, [puzzle, items, selectedIds, solvedGroups, mistakes, gameState]);
+  }, [puzzle, items, selectedIds, solvedGroups, mistakes, guessHistory, gameState]);
 
   const toggleTile = useCallback((id) => {
     if (gameState !== GAME_STATES.PLAYING) return;
@@ -192,6 +204,7 @@ export function usePuzzle(date = null) {
 
     try {
       const result = await submitGuess(puzzle.puzzle_date, selectedIds);
+      setGuessHistory(prev => [...prev, { ids: [...selectedIds], correct: result.correct }]);
 
       if (result.correct) {
         const newSolvedGroups = [...solvedGroups, result.group];
@@ -259,6 +272,7 @@ export function usePuzzle(date = null) {
     selectedIds,
     solvedGroups,
     mistakes,
+    guessHistory,
     gameState,
     wrongIds,
     oneAway,

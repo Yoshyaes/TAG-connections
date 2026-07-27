@@ -4,7 +4,7 @@ import ShareCard from './ShareCard';
 import { useStreak } from '../hooks/useStreak';
 import { isLoggedIn } from '../lib/api';
 
-export default function ResultsModal({ puzzle, solvedGroups, mistakes, solved, onClose }) {
+export default function ResultsModal({ puzzle, solvedGroups, mistakes, guessHistory, solved, onClose }) {
   const { recordPlay, currentStreak } = useStreak();
 
   useEffect(() => {
@@ -85,6 +85,17 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, solved, o
             </p>
           </div>
 
+          {/* Share card — renders immediately above any stats/streak
+              display, per the share-mechanics brief, so it's the first
+              thing a player can act on. */}
+          <ShareCard
+            puzzle={puzzle}
+            solvedGroups={solvedGroups}
+            mistakes={mistakes}
+            guessHistory={guessHistory}
+            solved={solved}
+          />
+
           {/* Streak display */}
           {currentStreak > 0 && (
             <div
@@ -129,14 +140,6 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, solved, o
               </span>
             </a>
           )}
-
-          {/* Share card */}
-          <ShareCard
-            puzzle={puzzle}
-            solvedGroups={solvedGroups}
-            mistakes={mistakes}
-            solved={solved}
-          />
 
           {/* Close button */}
           <button

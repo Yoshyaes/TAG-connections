@@ -210,6 +210,8 @@ class TAG_Connections_Scheduler {
             $narrow_recently   = in_array(true, array_column(array_slice($history, 0, self::NARROW_GAP), 'narrow'), true);
 
             foreach ([ 'strict', 'variety_only', 'any' ] as $pass) {
+                $candidates = [];
+
                 foreach ($pool as $index => $p) {
                     if (in_array($index, $used_ids, true)) {
                         continue;
@@ -234,11 +236,53 @@ class TAG_Connections_Scheduler {
                         }
                     }
 
-                    $puzzle_data = $p;
-                    $used_ids[]  = $index;
-                    array_unshift($history, ['franchise' => $franchise, 'family' => $family, 'narrow' => $narrow]);
-                    break 2;
+                    $candidates[] = compact('index', 'p', 'franchise', 'family', 'narrow');
                 }
+
+                if (!$candidates) {
+                    continue;
+                }
+
+                // Choose among ALL valid candidates rather than taking the first.
+                //
+                // First-fit meant array position still decided timing: a batch
+                // appended to the end of the pool would not play for as many days
+                // as there are unused entries before it. Since used-pool ids are
+                // array indices, the array cannot be reordered to fix that
+                // without remapping what every stored id refers to -- so the
+                // selection changes instead of the data.
+                //
+                // Preference goes to whichever genre family has been seen LEAST
+                // in the recent window -- not to cross-franchise puzzles
+                // outright. Hard-preferring 'mixed' just swaps one monoculture
+                // for another: every day becomes cross-franchise and a good
+                // franchise-deep board never gets its turn.
+                //
+                // Ties break on a date-seeded hash, so the choice is stable for a
+                // given day and identical for every player, but is not simply
+                // "lowest index".
+                $recent_all = array_count_values(array_column(array_slice($history, 0, self::VARIETY_WINDOW * 2), 'family'));
+                usort($candidates, function ($a, $b) use ($date, $recent_all) {
+                    $ac = $recent_all[ $a['family'] ] ?? 0;
+                    $bc = $recent_all[ $b['family'] ] ?? 0;
+                    if ($ac !== $bc) {
+                        return $ac <=> $bc;
+                    }
+                    return strcmp(
+                        md5($date . ':' . $a['index']),
+                        md5($date . ':' . $b['index'])
+                    );
+                });
+
+                $chosen      = $candidates[0];
+                $puzzle_data = $chosen['p'];
+                $used_ids[]  = $chosen['index'];
+                array_unshift($history, [
+                    'franchise' => $chosen['franchise'],
+                    'family'    => $chosen['family'],
+                    'narrow'    => $chosen['narrow'],
+                ]);
+                break;
             }
 
             // Pool exhausted: recycle as a last resort so the daily puzzle

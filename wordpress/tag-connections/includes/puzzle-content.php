@@ -2,6 +2,16 @@
 if (!defined('ABSPATH')) exit;
 
 function tag_connections_get_puzzle_pool() {
+    // Batch two (2026-09-07): 40 cross-franchise puzzles, approved and in
+    // rotation. Appended rather than interleaved on purpose — the scheduler no
+    // longer walks this array in order, it picks by franchise and genre
+    // spacing, so position here does not decide when a puzzle plays.
+    require_once __DIR__ . '/puzzle-content-batch2.php';
+
+    return array_merge(tag_connections_get_puzzle_pool_base(), tag_connections_get_puzzle_pool_batch2());
+}
+
+function tag_connections_get_puzzle_pool_base() {
     return [
         // ===== PUZZLE 1 =====
         [

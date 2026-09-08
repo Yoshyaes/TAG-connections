@@ -137,7 +137,10 @@ function tag_connections_shortcode($atts) {
             'nonce'   => wp_create_nonce('wp_rest'),
             'userId'  => get_current_user_id(),
             'isAdmin' => current_user_can('manage_options'),
-            'mode'    => 'game',
+            // NOTE: no 'mode' key. One was localized here for a long time and the
+            // bundle never read it — the real switch is a data-mode attribute on
+            // #tag-connections-root, which the admin build checks. Shipping a
+            // config key nothing reads invites someone to "fix" the wrong thing.
         ]);
     }
 

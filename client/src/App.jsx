@@ -16,7 +16,11 @@ export default function App() {
   }
 
   return (
-    <div className="w-full min-h-screen flex flex-col items-center">
+    // C3: min-h-screen forced the embedded SPA to the full viewport height,
+    // leaving a large blank block below the board on desktop (it's one
+    // panel on a WP page, not a standalone app). A content-driven height
+    // with a small floor instead.
+    <div className="w-full flex flex-col items-center" style={{ minHeight: '600px' }}>
       <ScrollToTop />
       <Routes>
         <Route

@@ -34,7 +34,11 @@
 }
 
 #root {
-  min-height: 100vh;
+  /* C3: 100vh forced the arcade stage to the full viewport height, leaving
+     a large blank block below the board on desktop. The game content sets
+     its own height; a 600px floor just keeps very short boards from
+     collapsing to nothing. */
+  min-height: 600px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -170,17 +174,20 @@
   -webkit-box-orient: unset !important;
 }
 
-/* Auto-shrink for long item names */
+/* Auto-shrink for long item names. max() floors the computed size at 12px
+   (C6) even though the em multiplier is still relative to the tile's own
+   responsive font-size -- each operand is resolved on its own terms before
+   the comparison, so this works the same as it would with two px values. */
 .tag-tile-text-sm {
-  font-size: 0.85em !important;
+  font-size: max(12px, 0.85em) !important;
 }
 .tag-tile-text-xs {
-  font-size: 0.75em !important;
+  font-size: max(12px, 0.75em) !important;
 }
 
 /* Responsive tile font sizing */
 @media (max-width: 374px) {
-  .tag-tile { font-size: 11px !important; min-height: 52px !important; padding: 8px 4px !important; }
+  .tag-tile { font-size: 12px !important; min-height: 52px !important; padding: 8px 4px !important; }
 }
 @media (min-width: 375px) and (max-width: 480px) {
   .tag-tile { font-size: 13px !important; min-height: 58px !important; }

@@ -21,8 +21,11 @@ export default function GroupReveal({ group, index }) {
       >
         {group.name}
       </span>
+      {/* C7: the row already has a solid tier-color background, so the old
+          opacity-80 just dropped the text's contrast against it for no
+          reason -- full opacity to clear the 4.5:1 AA floor. */}
       <span
-        className="text-[13px] font-normal opacity-80"
+        className="text-[13px] font-normal"
         style={{ color: '#0F0F14' }}
       >
         {group.items.map(i => i.text).join(', ')}

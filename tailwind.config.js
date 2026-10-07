@@ -21,7 +21,7 @@ export default {
         display: ['"Space Grotesk"', 'sans-serif'],
       },
       maxWidth: {
-        game: '480px',
+        game: '600px',
       },
       borderRadius: {
         tile: '10px',

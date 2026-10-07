@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { MAX_MISTAKES } from '../hooks/usePuzzle';
 import { isLoggedIn } from '../lib/api';
 
@@ -11,11 +12,10 @@ const TIER_EMOJI = {
   green: '🟩',
   blue: '🟦',
   purple: '🟪',
-  gold: '🟥',
+  gold: '🟨',
 };
 
-const SHARE_URL =
-  'https://savepoint.twoaveragegamers.com/arcade?utm_source=arcade&utm_medium=share_grid&utm_campaign=connections';
+const SHARE_URL = 'https://www.twoaveragegamers.com/connections/';
 
 export default function ShareCard({ puzzle, solvedGroups, mistakes, guessHistory, solved }) {
   const [copyState, setCopyState] = useState('idle'); // idle | copied | shared | error
@@ -163,6 +163,17 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, guessHistory
           Couldn't copy automatically — select the text above and copy it manually.
         </p>
       )}
+
+      {/* C11: the Header's Archive link already exists, but this is the
+          moment a player is most likely to want it -- right after finishing
+          today's puzzle, not buried in a persistent nav row. */}
+      <Link
+        to="/archive"
+        className="text-[13px] font-semibold underline"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        See past puzzles →
+      </Link>
     </div>
   );
 }

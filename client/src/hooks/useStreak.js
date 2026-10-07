@@ -11,11 +11,14 @@ function getStreakData() {
   }
 }
 
-function getTodayEST() {
-  const now = new Date();
-  return new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
-    .toISOString()
-    .split('T')[0];
+// A4: streak/played-today tracking uses UTC, matching Rank Arena's clock
+// (new Date().toISOString().slice(0,10)) -- a player who completes both
+// games just after midnight UTC used to see Rank Arena's streak reset
+// while this one still counted the same day. Puzzle SELECTION stays on
+// its own server-side clock (puzzle_date comes from the API; nothing in
+// this client computes "today" for that), only this bookkeeping changed.
+function getTodayUTC() {
+  return new Date().toISOString().split('T')[0];
 }
 
 // A streak is only "alive" if the user played today or yesterday. Without
@@ -25,7 +28,7 @@ function getTodayEST() {
 // arcade games' streak displays.
 function isStreakAlive(lastPlayed) {
   if (!lastPlayed) return false;
-  const today = getTodayEST();
+  const today = getTodayUTC();
   const yesterday = new Date(new Date(today).getTime() - 86400000).toISOString().split('T')[0];
   return lastPlayed === today || lastPlayed === yesterday;
 }
@@ -41,7 +44,7 @@ export function useStreak() {
   }, [streak]);
 
   const recordPlay = useCallback(function recordPlay(solved) {
-    const today = getTodayEST();
+    const today = getTodayUTC();
     const data = getStreakData();
 
     if (data.lastPlayed === today) return data;

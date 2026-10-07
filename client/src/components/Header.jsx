@@ -1,6 +1,13 @@
 import { Link } from 'react-router-dom';
 import { useStreak } from '../hooks/useStreak';
 
+// A1: the theme's title row already renders the page H1 ("Connections"),
+// so this no longer repeats it as a second, redundant H1 -- that duplicate
+// was the real substance of C2, just missed earlier because a bundle-only
+// check can't see the server-rendered H1 it collides with. The remaining
+// row (puzzle number/date pill, streak badge) is styled to match Rank
+// Arena's equivalent row, the closest this pair of separately-built React
+// apps can get to a literally shared header component.
 export default function Header({ puzzleNumber, puzzleDate }) {
   const { currentStreak } = useStreak();
 
@@ -13,17 +20,11 @@ export default function Header({ puzzleNumber, puzzleDate }) {
     : '';
 
   return (
-    <header className="w-full flex flex-col items-center gap-1 mb-6">
-      <h1
-        className="font-display text-[28px] font-extrabold tracking-tight"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        TAG Connections
-      </h1>
+    <header className="w-full flex flex-col items-center gap-2 mb-6">
       <div className="flex items-center gap-3">
         {puzzleNumber && (
           <span
-            className="text-[13px] font-normal"
+            className="text-[13px] uppercase tracking-wide font-normal"
             style={{ color: 'var(--text-secondary)' }}
           >
             Puzzle #{puzzleNumber}
@@ -43,13 +44,13 @@ export default function Header({ puzzleNumber, puzzleDate }) {
             style={{ color: 'var(--tier-gold)' }}
           >
             <span>🔥</span>
-            <span>{currentStreak}</span>
+            <span>{currentStreak} day streak</span>
           </span>
         )}
       </div>
       <Link
         to="/archive"
-        className="text-[12px] font-semibold mt-1 underline"
+        className="text-[12px] font-semibold underline"
         style={{ color: 'var(--text-secondary)' }}
       >
         Archive

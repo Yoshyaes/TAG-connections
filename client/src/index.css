@@ -174,10 +174,13 @@
   -webkit-box-orient: unset !important;
 }
 
-/* Auto-shrink for long item names. max() floors the computed size at 12px
-   (C6) even though the em multiplier is still relative to the tile's own
-   responsive font-size -- each operand is resolved on its own terms before
-   the comparison, so this works the same as it would with two px values. */
+/* Auto-shrink for long item names. The max(12px, ...) floor (C6) means this
+   has no effect at all on the two narrow breakpoints below, where the base
+   size is already 12-13px and 0.85/0.75 of that resolves under the floor --
+   the shrink gets cancelled out exactly where long words most need it. The
+   real fix for those two breakpoints is reclaiming horizontal room via
+   tighter tile padding instead (below); this still helps at the >=481px
+   breakpoint, where 0.85em of 15px clears the floor normally. */
 .tag-tile-text-sm {
   font-size: max(12px, 0.85em) !important;
 }
@@ -187,10 +190,10 @@
 
 /* Responsive tile font sizing */
 @media (max-width: 374px) {
-  .tag-tile { font-size: 12px !important; min-height: 52px !important; padding: 8px 4px !important; }
+  .tag-tile { font-size: 12px !important; min-height: 52px !important; padding: 8px 2px !important; }
 }
 @media (min-width: 375px) and (max-width: 480px) {
-  .tag-tile { font-size: 13px !important; min-height: 58px !important; }
+  .tag-tile { font-size: 13px !important; min-height: 58px !important; padding: 8px 3px !important; }
 }
 @media (min-width: 481px) {
   .tag-tile { font-size: 15px !important; min-height: 64px !important; }

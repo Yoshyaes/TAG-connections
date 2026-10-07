@@ -11,12 +11,15 @@ export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) 
     }
   }, [isWrong]);
 
-  // Auto-shrink font for long text
+  // Auto-shrink font for long text. Thresholds lowered from 16/10 -- at the
+  // 12px floor (C6) single words of exactly 9-10 characters ("Alchemist",
+  // "Blacksmith") were falling just outside the old 10-char cutoff and
+  // wrapping mid-word instead of shrinking.
   const text = item.text;
   const len = text.length;
   let sizeClass = '';
-  if (len > 16) sizeClass = 'tag-tile-text-xs';
-  else if (len > 10) sizeClass = 'tag-tile-text-sm';
+  if (len > 14) sizeClass = 'tag-tile-text-xs';
+  else if (len > 8) sizeClass = 'tag-tile-text-sm';
 
   return (
     <button

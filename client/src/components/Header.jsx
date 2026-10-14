@@ -8,7 +8,16 @@ import { useStreak } from '../hooks/useStreak';
 // row (puzzle number/date pill, streak badge) is styled to match Rank
 // Arena's equivalent row, the closest this pair of separately-built React
 // apps can get to a literally shared header component.
-export default function Header({ puzzleNumber, puzzleDate }) {
+//
+// `onOpenRules`: Rank Arena's "How to play" is a shell-rendered pill button
+// sitting beside its title row (inc/arcade-shell.php's tag_arcade_rules_button()).
+// Connections' title lives in that same server-rendered row, outside this
+// React root, so the button itself can't physically move next to it --
+// but it can (and now does) match that button's exact styling and sit in
+// this component's own top row instead of as a separate underlined link
+// floating below. PuzzleGrid passes its existing setShowRules handler in;
+// nothing about how the rules modal opens changes.
+export default function Header({ puzzleNumber, puzzleDate, onOpenRules }) {
   const { currentStreak } = useStreak();
 
   const formattedDate = puzzleDate
@@ -21,31 +30,43 @@ export default function Header({ puzzleNumber, puzzleDate }) {
 
   return (
     <header className="w-full flex flex-col items-center gap-2 mb-6">
-      <div className="flex items-center gap-3">
-        {puzzleNumber && (
-          <span
-            className="text-[13px] uppercase tracking-wide font-normal"
-            style={{ color: 'var(--text-secondary)' }}
+      <div className="w-full flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {puzzleNumber && (
+            <span
+              className="text-[13px] uppercase tracking-wide font-normal"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              Puzzle #{puzzleNumber}
+            </span>
+          )}
+          {formattedDate && (
+            <span
+              className="text-[13px] font-normal"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {formattedDate}
+            </span>
+          )}
+          {currentStreak > 0 && (
+            <span
+              className="text-[13px] font-semibold flex items-center gap-1"
+              style={{ color: 'var(--tier-gold)' }}
+            >
+              <span>🔥</span>
+              <span>{currentStreak} day streak</span>
+            </span>
+          )}
+        </div>
+        {onOpenRules && (
+          <button
+            type="button"
+            onClick={onOpenRules}
+            className="tag-connections-rules-open"
+            aria-haspopup="dialog"
           >
-            Puzzle #{puzzleNumber}
-          </span>
-        )}
-        {formattedDate && (
-          <span
-            className="text-[13px] font-normal"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            {formattedDate}
-          </span>
-        )}
-        {currentStreak > 0 && (
-          <span
-            className="text-[13px] font-semibold flex items-center gap-1"
-            style={{ color: 'var(--tier-gold)' }}
-          >
-            <span>🔥</span>
-            <span>{currentStreak} day streak</span>
-          </span>
+            How to play
+          </button>
         )}
       </div>
       <Link

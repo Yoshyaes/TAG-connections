@@ -49,11 +49,16 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, guessHistory
     attempt.ids.map(id => TIER_EMOJI[itemColorById[id]] || '⬜').join('')
   );
 
-  // "Lives remaining," not groups solved or mistakes made: 4 max mistakes,
-  // so a perfect game reads 4/4 and a loss (all 4 mistakes spent) always
-  // reads 0/4. Matches the spec's own perfect (4/4) and default (3/4, one
-  // mistake) examples exactly.
+  // "Lives remaining," not groups solved or mistakes made: a perfect game
+  // leaves all 4 standing, a loss (all 4 mistakes spent) leaves 0.
   const livesRemaining = Math.max(0, MAX_MISTAKES - mistakes);
+
+  // Dot icons, not a fraction -- matches MistakeTracker's own filled/hollow
+  // logic (index < remaining = filled) so the share text and the in-game
+  // tracker never disagree on what a given life count looks like.
+  const livesDisplay = Array.from({ length: MAX_MISTAKES })
+    .map((_, i) => (i < livesRemaining ? '●' : '○'))
+    .join(' ');
 
   let headerSuffix = '';
   if (solved && mistakes === 0) {
@@ -69,7 +74,7 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, guessHistory
 
   const shareText = [
     `TAG Connections #${puzzleNumber}`,
-    `🎮 ${livesRemaining}/4${headerSuffix}`,
+    `🎮 ${livesDisplay}${headerSuffix}`,
     '',
     ...rows,
     '',

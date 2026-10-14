@@ -128,16 +128,11 @@ export default function PuzzleGrid({ date = null }) {
   return (
     <div className="w-full flex flex-col items-center gap-3">
       {/* Header with puzzle info */}
-      <Header puzzleNumber={puzzle?.id} puzzleDate={puzzle?.puzzle_date} />
-
-      <button
-        onClick={() => setShowRules(true)}
-        className="text-[12px] font-semibold -mt-2 underline"
-        style={{ color: 'var(--text-secondary)' }}
-        aria-label="How to play"
-      >
-        How to play
-      </button>
+      <Header
+        puzzleNumber={puzzle?.id}
+        puzzleDate={puzzle?.puzzle_date}
+        onOpenRules={() => setShowRules(true)}
+      />
 
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 

@@ -80,6 +80,11 @@ export function completePuzzle({ puzzle_date, solved, mistakes, solve_time_secs,
   });
 }
 
+export function fetchLeaderboard(date) {
+  const q = date ? `?date=${encodeURIComponent(date)}` : '';
+  return request(`/puzzle/leaderboard${q}`);
+}
+
 export function fetchUserStats() {
   return request('/user/stats');
 }

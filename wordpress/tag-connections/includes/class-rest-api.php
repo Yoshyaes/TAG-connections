@@ -50,6 +50,20 @@ class TAG_Connections_REST_API {
             'permission_callback' => '__return_true',
         ]);
 
+        register_rest_route(self::NAMESPACE, '/puzzle/leaderboard', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_leaderboard'],
+            'permission_callback' => '__return_true',
+            'args' => [
+                'date' => [
+                    'required' => false,
+                    'validate_callback' => function($param) {
+                        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $param);
+                    },
+                ],
+            ],
+        ]);
+
         register_rest_route(self::NAMESPACE, '/puzzle/submit', [
             'methods' => 'POST',
             'callback' => [__CLASS__, 'submit_guess'],
@@ -129,7 +143,15 @@ class TAG_Connections_REST_API {
             return new WP_Error('not_found', 'No puzzle available for today', ['status' => 404]);
         }
 
-        return rest_ensure_response(self::strip_answers($puzzle));
+        // P2: unauthenticated (permission_callback is __return_true, no
+        // Authorization or Cookie needed) and the puzzle changes once a day,
+        // so a short public cache cuts DB hits on high-traffic days without
+        // ever serving a visitor yesterday's puzzle for more than a minute
+        // past rollover.
+        $response = rest_ensure_response(self::strip_answers($puzzle));
+        $response->header('Cache-Control', 'public, max-age=60, s-maxage=60');
+        $response->header('CDN-Cache-Control', 'max-age=300');
+        return $response;
     }
 
     /**
@@ -378,6 +400,33 @@ class TAG_Connections_REST_API {
         ]);
 
         return rest_ensure_response(['saved' => true, 'shield_consumed' => $shield_consumed]);
+    }
+
+    /**
+     * Public daily board: solved results only, fewest mistakes first, then
+     * fastest solve. Display names only, same exposure as Rank Arena's board.
+     */
+    public static function get_leaderboard($request) {
+        $date = $request->get_param('date');
+        if (!$date) {
+            $date = current_time('Y-m-d');
+        }
+
+        $rows = TAG_Connections_Database::get_leaderboard($date, 100);
+        $entries = [];
+        foreach ($rows as $i => $row) {
+            $entries[] = [
+                'rank' => $i + 1,
+                'display_name' => $row['display_name'],
+                'mistakes' => (int) $row['mistakes'],
+                'solve_time_secs' => $row['solve_time_secs'] === null ? null : (int) $row['solve_time_secs'],
+            ];
+        }
+
+        return rest_ensure_response([
+            'date' => $date,
+            'entries' => $entries,
+        ]);
     }
 
     public static function get_user_stats($request) {

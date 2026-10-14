@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ShareCard from './ShareCard';
 import { useStreak } from '../hooks/useStreak';
-import { isLoggedIn } from '../lib/api';
+import { isLoggedIn, fetchLeaderboard } from '../lib/api';
 
 export default function ResultsModal({ puzzle, solvedGroups, mistakes, guessHistory, solved, onClose }) {
   const { recordPlay, currentStreak } = useStreak();
@@ -10,6 +10,19 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, guessHist
   useEffect(() => {
     recordPlay(solved);
   }, [solved, recordPlay]);
+
+  // Today's board. Delayed slightly so the player's own /puzzle/complete
+  // write (fired as the game ends) has landed before we read the ranking.
+  const [board, setBoard] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchLeaderboard(puzzle?.puzzle_date)
+        .then((res) => { if (!cancelled) setBoard(res); })
+        .catch(() => {});
+    }, 900);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [puzzle?.puzzle_date]);
 
   // Confetti on win (skip if user prefers reduced motion)
   useEffect(() => {
@@ -109,6 +122,33 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, guessHist
               >
                 {currentStreak} day streak
               </span>
+            </div>
+          )}
+
+          {/* Daily leaderboard: solved runs, fewest mistakes then fastest */}
+          {board && board.entries && board.entries.length > 0 && (
+            <div
+              className="w-full rounded-tile px-4 py-3"
+              style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}
+            >
+              <p
+                className="text-[12px] uppercase tracking-wide font-semibold mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Today&apos;s board
+              </p>
+              <ol className="flex flex-col gap-1 text-[13px]">
+                {board.entries.slice(0, 5).map((e) => (
+                  <li key={e.rank} className="flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                    <span className="w-5" style={{ color: 'var(--text-secondary)' }}>{e.rank}</span>
+                    <span className="flex-1 truncate">{e.display_name}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      {e.mistakes} miss{e.mistakes === 1 ? '' : 'es'}
+                      {e.solve_time_secs != null ? ` · ${e.solve_time_secs}s` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
 

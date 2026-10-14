@@ -208,6 +208,17 @@ class TAG_Connections_Database {
             'groups_order' => is_string($data['groups_order']) ? $data['groups_order'] : json_encode($data['groups_order']),
             'completed_at' => current_time('mysql'),
         ]);
+
+        // Fire-and-forget signal for tag-membership's WebhookOutbound (if
+        // active) to forward to SavePoint. See project_unified_user_model_plan.
+        // No hard dependency: a no-op when tag-membership isn't installed.
+        // Connections isn't score-based, so 'score' is omitted deliberately.
+        do_action('tag_arcade_result_recorded', 'tag_connections', (int) $user_id, [
+            'result_date' => $data['puzzle_date'],
+            'solved' => (bool) $data['solved'],
+            'mistakes' => (int) $data['mistakes'],
+            'solve_time_secs' => $data['solve_time_secs'] !== null ? (int) $data['solve_time_secs'] : null,
+        ]);
     }
 
     public static function get_streak($user_id) {
@@ -244,5 +255,21 @@ class TAG_Connections_Database {
             FROM $table WHERE user_id = %d",
             $user_id
         ));
+    }
+
+    public static function get_leaderboard($date, $limit = 100) {
+        global $wpdb;
+        $results = $wpdb->prefix . 'tag_results';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT u.display_name, r.mistakes, r.solve_time_secs
+            FROM $results r
+            INNER JOIN {$wpdb->users} u ON u.ID = r.user_id
+            WHERE r.puzzle_date = %s AND r.solved = 1
+            ORDER BY r.mistakes ASC, r.solve_time_secs ASC, r.completed_at ASC
+            LIMIT %d",
+            $date,
+            $limit
+        ), ARRAY_A);
     }
 }

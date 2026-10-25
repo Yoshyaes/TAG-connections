@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Tile from './Tile';
 import GroupReveal from './GroupReveal';
@@ -7,8 +7,164 @@ import ResultsModal from './ResultsModal';
 import RulesModal from './RulesModal';
 import Header from './Header';
 import { usePuzzle } from '../hooks/usePuzzle';
+import { haptic, applyDragSelect, isTouchInput } from '../lib/touch';
 
 const RULES_SEEN_KEY = 'tag_connections_seen_rules';
+const TIER_BG = {
+  green: 'var(--tier-green)',
+  blue: 'var(--tier-blue)',
+  purple: 'var(--tier-purple)',
+  gold: 'var(--tier-gold)',
+};
+// A drag only claims a tile once the finger is this far inside it, so a
+// stroke that grazes a corner on its way past does not pick it up.
+const DRAG_INSET_PX = 10;
+// After a touch ends (tap or drag, both handled on pointerup), swallow the
+// click the browser may still send, so a tile never toggles twice.
+const DRAG_CLICK_GUARD_MS = 400;
+
+function now() {
+  return (window.performance && window.performance.now) ? window.performance.now() : Date.now();
+}
+
+/**
+ * Touch input for the grid.
+ *  - Drag-select: one finger stroke across the grid selects every tile it
+ *    crosses (or, when the stroke starts on a selected tile, deselects them).
+ *  - Tap: toggles on pointerup instead of waiting for the browser's click.
+ *    Chrome drops the click for a quick second tap near the last touch
+ *    (double-tap detection), which made fast tapping lose picks; handling
+ *    the tap here makes every tap count, and the click that may follow is
+ *    swallowed so it cannot toggle twice.
+ * Touch and pen only; a mouse and the keyboard keep the tile's own
+ * onClick / Enter / Space, so desktop is unchanged.
+ */
+function useDragSelect(gridRef, { enabled, selectedIds, items, setSelection, onTap }) {
+  const live = useRef({});
+  live.current = { enabled, selectedIds, items, setSelection, onTap };
+  const hasGrid = items.length > 0;
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return undefined;
+    let drag = null;
+    let suppressUntil = 0;
+
+    const idFor = (el) => {
+      const raw = el.getAttribute('data-tile-id');
+      const match = live.current.items.find(it => String(it.id) === raw);
+      return match ? match.id : null;
+    };
+    const tileAt = (x, y) => {
+      const hit = document.elementFromPoint(x, y);
+      const tile = hit && hit.closest ? hit.closest('[data-tile-id]') : null;
+      if (!tile || !grid.contains(tile)) return null;
+      const r = tile.getBoundingClientRect();
+      const inset = Math.min(DRAG_INSET_PX, r.width * 0.15, r.height * 0.15);
+      if (x < r.left + inset || x > r.right - inset || y < r.top + inset || y > r.bottom - inset) return null;
+      return tile;
+    };
+    const apply = (id) => {
+      const next = applyDragSelect(drag.sel, id, drag.mode);
+      if (next === drag.sel) return;
+      drag.sel = next;
+      haptic('tick');
+      live.current.setSelection(() => next);
+    };
+
+    function down(e) {
+      // A new touch is a new gesture: only a click with no pointerdown of
+      // its own (the one some browsers send at the end of a drag) is eaten.
+      suppressUntil = 0;
+      if (e.pointerType === 'mouse' || !e.isPrimary || drag) return;
+      if (!live.current.enabled) return;
+      const tile = e.target && e.target.closest ? e.target.closest('[data-tile-id]') : null;
+      if (!tile || !grid.contains(tile)) return;
+      const id = idFor(tile);
+      if (id === null) return;
+      const sel = live.current.selectedIds;
+      drag = {
+        pointerId: e.pointerId,
+        startId: id,
+        mode: sel.includes(id) ? 'deselect' : 'select',
+        sel,
+        visited: new Set([String(id)]),
+        active: false,
+      };
+    }
+    function move(e) {
+      if (!drag || e.pointerId !== drag.pointerId || !live.current.enabled) return;
+      const tile = tileAt(e.clientX, e.clientY);
+      if (!tile) return;
+      const key = tile.getAttribute('data-tile-id');
+      if (drag.visited.has(key)) return;
+      const id = idFor(tile);
+      if (id === null) return;
+      if (!drag.active) {
+        drag.active = true;
+        apply(drag.startId);
+      }
+      drag.visited.add(key);
+      apply(id);
+    }
+    function up(e) {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      const d = drag;
+      drag = null;
+      if (e.type === 'pointercancel') return;
+      suppressUntil = now() + DRAG_CLICK_GUARD_MS;
+      if (d.active || !live.current.enabled) return;
+      // A tap: it must end on the tile it started on.
+      const hit = document.elementFromPoint(e.clientX, e.clientY);
+      const tile = hit && hit.closest ? hit.closest('[data-tile-id]') : null;
+      if (tile && tile.getAttribute('data-tile-id') === String(d.startId)) live.current.onTap(d.startId);
+    }
+    function clickGuard(e) {
+      if (now() < suppressUntil) {
+        suppressUntil = 0;
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    grid.addEventListener('pointerdown', down);
+    grid.addEventListener('pointermove', move);
+    grid.addEventListener('pointerup', up);
+    grid.addEventListener('pointercancel', up);
+    grid.addEventListener('click', clickGuard, true);
+    return () => {
+      grid.removeEventListener('pointerdown', down);
+      grid.removeEventListener('pointermove', move);
+      grid.removeEventListener('pointerup', up);
+      grid.removeEventListener('pointercancel', up);
+      grid.removeEventListener('click', clickGuard, true);
+    };
+  }, [gridRef, hasGrid]);
+}
+
+/**
+ * Solve animation: before the group bar replaces them, the four solved tiles
+ * slide into the top row of the grid (each to one slot, in their current
+ * reading order) and settle in the group's color. Offsets are measured
+ * before paint and handed to the CSS keyframes as --dx/--dy.
+ */
+function useSolveCollapse(gridRef, solving) {
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid || !solving) return;
+    const tiles = Array.from(grid.querySelectorAll('[data-tile-id]'));
+    const ids = new Set(solving.ids.map(String));
+    const moving = tiles.filter(t => ids.has(t.getAttribute('data-tile-id')));
+    moving.forEach((tile, k) => {
+      const slot = tiles[k];
+      if (!slot) return;
+      const a = tile.getBoundingClientRect();
+      const b = slot.getBoundingClientRect();
+      tile.style.setProperty('--dx', `${Math.round(b.left - a.left)}px`);
+      tile.style.setProperty('--dy', `${Math.round(b.top - a.top)}px`);
+    });
+  }, [gridRef, solving]);
+}
 
 function msUntilNextEstMidnight() {
   const now = new Date();
@@ -50,15 +206,37 @@ export default function PuzzleGrid({ date = null }) {
     toggleTile,
     submitSelection,
     deselectAll,
+    setSelection,
+    shuffle,
+    toast,
+    solving,
     isComplete,
     isFailed,
     isPlaying,
+    isSubmitting,
     canSubmit,
   } = usePuzzle(date);
 
   const [showResults, setShowResults] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const countdown = useNextPuzzleCountdown();
+  const gridRef = useRef(null);
+
+  // A light tick on every tap-toggle, fired inside the click / pointerup so
+  // iOS allows it.
+  const onToggle = useCallback((id) => {
+    haptic('tick');
+    toggleTile(id);
+  }, [toggleTile]);
+
+  useDragSelect(gridRef, { enabled: isPlaying, selectedIds, items, setSelection, onTap: onToggle });
+  useSolveCollapse(gridRef, solving);
+  const onShuffle = useCallback(() => {
+    haptic('tap');
+    shuffle();
+  }, [shuffle]);
+  const solvingIds = solving ? solving.ids : [];
+  const solveColor = solving ? (TIER_BG[solving.color] || 'var(--accent-primary)') : null;
 
   // Show results modal when game ends
   useEffect(() => {
@@ -134,36 +312,42 @@ export default function PuzzleGrid({ date = null }) {
         onOpenRules={() => setShowRules(true)}
       />
 
-      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+      {showRules && <RulesModal touch={isTouchInput()} onClose={() => setShowRules(false)} />}
 
       {/* Solved groups */}
       {solvedGroups.map((group, i) => (
         <GroupReveal key={group.id} group={group} index={i} />
       ))}
 
-      {/* Near-miss toast: exactly 3 of 4 selected items shared a group */}
-      {oneAway && (
-        <div
-          className="px-4 py-1.5 rounded-tile text-[13px] font-semibold animate-pulse"
-          style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--text-primary)' }}
-        >
-          One away!
-        </div>
-      )}
-
-      {/* Tile grid */}
+      {/* Tile grid. The toast ("One away!", "Already guessed!") floats over
+          the top edge of the grid instead of sitting in the flow, so the
+          board never jumps down when it appears. */}
       {items.length > 0 && (
-        <div className="w-full grid grid-cols-4 gap-2">
-          {items.map(item => (
-            <Tile
-              key={item.id}
-              item={item}
-              isSelected={selectedIds.includes(item.id)}
-              isWrong={wrongIds.includes(item.id)}
-              onToggle={toggleTile}
-              disabled={!isPlaying}
-            />
-          ))}
+        <div className="w-full relative">
+          <div className="tag-toast-slot" role="status" aria-live="polite" data-one-away={oneAway ? '1' : undefined}>
+            {toast && (
+              <div key={toast.n} className={`tag-toast tag-toast-${toast.kind}`}>
+                {toast.text}
+              </div>
+            )}
+          </div>
+          <div
+            ref={gridRef}
+            className={`w-full grid grid-cols-4 gap-2 tag-grid${isPlaying ? ' tag-grid-live' : ''}`}
+          >
+            {items.map(item => (
+              <Tile
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                isWrong={wrongIds.includes(item.id)}
+                isSolving={solvingIds.includes(item.id)}
+                solveColor={solveColor}
+                onToggle={onToggle}
+                disabled={!isPlaying}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -172,12 +356,28 @@ export default function PuzzleGrid({ date = null }) {
         <MistakeTracker mistakes={mistakes} />
       </div>
 
-      {/* Action buttons */}
-      {isPlaying && (
-        <div className="flex gap-3 mt-2">
+      {/* Action buttons. They stay on screen (disabled) while a guess
+          resolves, so the page below the grid does not jump each guess. */}
+      {(isPlaying || isSubmitting) && (
+        <div className="w-full flex justify-center gap-2 mt-2">
           <button
+            type="button"
+            onClick={onShuffle}
+            disabled={!isPlaying}
+            className="tag-action-btn px-4 rounded-tile text-[14px] font-semibold transition-all duration-150"
+            style={{
+              backgroundColor: 'transparent',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            Shuffle
+          </button>
+          <button
+            type="button"
             onClick={deselectAll}
-            className="px-6 py-2.5 rounded-tile text-[14px] font-semibold transition-all duration-150"
+            disabled={!isPlaying}
+            className="tag-action-btn px-4 rounded-tile text-[14px] font-semibold transition-all duration-150"
             style={{
               backgroundColor: 'transparent',
               color: 'var(--text-secondary)',
@@ -187,9 +387,10 @@ export default function PuzzleGrid({ date = null }) {
             Deselect All
           </button>
           <button
+            type="button"
             onClick={submitSelection}
             disabled={!canSubmit}
-            className="px-6 py-2.5 rounded-tile text-[14px] font-semibold transition-all duration-150"
+            className="tag-action-btn tag-action-primary px-6 rounded-tile text-[14px] font-semibold transition-all duration-150"
             style={{
               backgroundColor: canSubmit ? 'var(--accent-primary)' : 'var(--bg-surface)',
               color: canSubmit ? 'var(--text-primary)' : 'var(--text-secondary)',

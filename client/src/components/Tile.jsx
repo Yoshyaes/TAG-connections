@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) {
+export default function Tile({ item, isSelected, isWrong, isSolving = false, solveColor = null, onToggle, disabled }) {
   const [shaking, setShaking] = useState(false);
 
   useEffect(() => {
@@ -23,6 +23,8 @@ export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) 
 
   return (
     <button
+      type="button"
+      data-tile-id={String(item.id)}
       onClick={() => !disabled && onToggle(item.id)}
       onKeyDown={(e) => {
         if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
@@ -37,8 +39,10 @@ export default function Tile({ item, isSelected, isWrong, onToggle, disabled }) 
         tag-tile
         ${isSelected ? 'tag-tile-selected' : ''}
         ${shaking ? 'animate-shake' : ''}
-        ${disabled ? 'tag-tile-disabled' : ''}
+        ${isSolving ? 'tag-tile-solving' : ''}
+        ${disabled && !isSolving ? 'tag-tile-disabled' : ''}
       `}
+      style={isSolving && solveColor ? { '--solve-color': solveColor } : undefined}
     >
       {shaking && (
         <div className="absolute inset-0 rounded-tile animate-red-flash pointer-events-none" />

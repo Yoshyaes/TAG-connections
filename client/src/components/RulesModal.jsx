@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function RulesModal({ onClose }) {
+export default function RulesModal({ onClose, touch = false }) {
   return (
     <AnimatePresence>
       <motion.div
@@ -38,7 +38,9 @@ export default function RulesModal({ onClose }) {
             className="text-[14px] text-center leading-relaxed"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Sort 16 items into 4 secret groups of 4. Tap items to select them,
+            Sort 16 items into 4 secret groups of 4. {touch
+              ? 'Tap items, or slide a finger across them, to select them,'
+              : 'Tap items to select them,'}{' '}
             then Submit. 4 mistakes and it's game over.
           </p>
 

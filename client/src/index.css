@@ -44,11 +44,14 @@
   align-items: center;
 }
 
-/* Tile shake animation */
+/* Tile shake animation. Uses the individual `translate` property, not
+   `transform`: .tag-tile pins `transform` with !important (to beat theme
+   button styles), and an !important declaration outranks an animation, so a
+   transform-based shake never actually moved on the live board. */
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-  20%, 40%, 60%, 80% { transform: translateX(4px); }
+  0%, 100% { translate: 0 0; }
+  10%, 30%, 50%, 70%, 90% { translate: -4px 0; }
+  20%, 40%, 60%, 80% { translate: 4px 0; }
 }
 
 .animate-shake {
@@ -144,8 +147,24 @@
   height: auto !important;
 }
 
-.tag-tile:hover {
-  background-color: var(--bg-surface) !important;
+/* Hover only where hover is real: on a phone a tapped tile kept the hover
+   color until the next tap elsewhere, which read as a half-selected tile. */
+@media (hover: hover) {
+  .tag-tile:not(:disabled):hover {
+    background-color: var(--bg-surface) !important;
+  }
+}
+
+/* Keyboard focus ring. .tag-tile sets outline:none !important to beat the
+   theme, which also removed the only focus indicator. */
+.tag-tile:focus-visible {
+  outline: 3px solid var(--accent-secondary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Press feedback, via `scale` so it composes with the pinned transform. */
+.tag-tile:not(:disabled):active {
+  scale: 0.96;
 }
 
 .tag-tile-selected {
@@ -153,6 +172,84 @@
   box-shadow: 0 0 12px rgba(124, 77, 255, 0.4), 0 0 4px rgba(124, 77, 255, 0.2) !important;
   transform: scale(1.03) !important;
   background-color: #252536 !important;
+}
+
+/* Drag-select: while a round is live the grid owns touch gestures, so a
+   finger stroke across tiles selects them instead of scrolling the page.
+   Page scroll still works everywhere outside the grid. */
+#tag-connections-root .tag-grid-live {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Solve: the four tiles take the group's color and slide into the top row
+   (--dx/--dy are measured in PuzzleGrid), then the group bar replaces them. */
+.tag-tile-solving {
+  background-color: var(--solve-color, var(--accent-primary)) !important;
+  color: #0F0F14 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  z-index: 2;
+  animation: tileCollapse 420ms cubic-bezier(.5, 0, .3, 1) forwards;
+}
+@keyframes tileCollapse {
+  0% { translate: 0 0; scale: 1.03; }
+  70% { translate: var(--dx, 0) var(--dy, 0); scale: 1; opacity: 1; }
+  100% { translate: var(--dx, 0) var(--dy, 0); scale: 0.92; opacity: 0.85; }
+}
+
+/* Action row: Shuffle / Deselect All / Submit, all at least 48px tall. */
+#tag-connections-root .tag-action-btn {
+  min-height: 48px;
+  min-width: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#tag-connections-root .tag-action-btn:not(:disabled):active {
+  scale: 0.96;
+}
+#tag-connections-root .tag-action-btn:disabled:not(.tag-action-primary) {
+  opacity: 0.5;
+  cursor: default;
+}
+#tag-connections-root .tag-action-primary {
+  min-width: 96px;
+}
+#tag-connections-root button:focus-visible {
+  outline: 3px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Toast overlay: anchored above the grid's top edge and out of the flow, so
+   showing it never pushes the board down. */
+#tag-connections-root .tag-toast-slot {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 5;
+  transform: translate(-50%, calc(-100% - 4px));
+  pointer-events: none;
+  white-space: nowrap;
+}
+#tag-connections-root .tag-toast {
+  padding: 6px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background-color: var(--accent-primary);
+  color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  animation: toastIn 160ms ease-out;
+}
+#tag-connections-root .tag-toast-repeat {
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+}
+@keyframes toastIn {
+  0% { opacity: 0; translate: 0 4px; }
+  100% { opacity: 1; translate: 0 0; }
 }
 
 .tag-tile-disabled {
@@ -226,10 +323,16 @@
   .animate-shake,
   .animate-flip-in,
   .animate-red-flash,
-  .animate-slide-up {
+  .animate-slide-up,
+  .tag-tile-solving,
+  #tag-connections-root .tag-toast {
     animation: none !important;
   }
   .tag-tile {
     transition: none !important;
+  }
+  .tag-tile:not(:disabled):active,
+  #tag-connections-root .tag-action-btn:not(:disabled):active {
+    scale: none;
   }
 }

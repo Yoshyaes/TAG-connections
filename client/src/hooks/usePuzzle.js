@@ -7,6 +7,7 @@ import {
   completePuzzle,
   isLoggedIn,
 } from '../lib/api';
+import { haptic, reducedMotion, isRepeatGuess } from '../lib/touch';
 
 const GAME_STATES = {
   IDLE: 'IDLE',
@@ -18,6 +19,14 @@ const GAME_STATES = {
 
 export const MAX_MISTAKES = 4;
 const MAX_SELECTED = 4;
+// How long the wrong-guess shake holds the board before play resumes, and
+// how long each toast stays up. The toast is an overlay, so it can outlive
+// the lock without moving the grid.
+const WRONG_LOCK_MS = 500;
+const TOAST_MS = { oneAway: 1600, repeat: 1400 };
+// The four solved tiles slide together into the top row before the group
+// bar replaces them. 0 under reduced motion.
+const SOLVE_COLLAPSE_MS = 420;
 
 function getStorageKey(date) {
   return `tag_connections_${date}`;
@@ -62,6 +71,13 @@ export function usePuzzle(date = null) {
   const [gameState, setGameState] = useState(GAME_STATES.IDLE);
   const [wrongIds, setWrongIds] = useState([]);
   const [oneAway, setOneAway] = useState(false);
+  // { text, kind, n }: n changes on every show so a repeated message still
+  // re-announces and restarts its timer.
+  const [toast, setToast] = useState(null);
+  // The tiles of a just-solved group while they collapse, and its color.
+  const [solving, setSolving] = useState(null);
+  const toastTimerRef = useRef(0);
+  const toastSeqRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const startTimeRef = useRef(null);
@@ -84,6 +100,15 @@ export function usePuzzle(date = null) {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [gameState]);
+
+  const showToast = useCallback((text, kind, ms) => {
+    clearTimeout(toastTimerRef.current);
+    toastSeqRef.current += 1;
+    setToast({ text, kind, n: toastSeqRef.current });
+    toastTimerRef.current = setTimeout(() => setToast(null), ms);
+  }, []);
+
+  useEffect(() => () => clearTimeout(toastTimerRef.current), []);
 
   // Load puzzle on mount or when date changes
   useEffect(() => {
@@ -164,6 +189,21 @@ export function usePuzzle(date = null) {
     });
   }, [gameState]);
 
+  // Explicit set/unset for drag-select, where one stroke either adds every
+  // tile it crosses or removes every tile it crosses.
+  const setSelection = useCallback((updater) => {
+    if (gameState !== GAME_STATES.PLAYING) return;
+    setSelectedIds(updater);
+  }, [gameState]);
+
+  // Reorders the remaining tiles. Selection, mistakes and history are
+  // untouched; only the on-screen order changes (and is saved, so a reload
+  // keeps the new order).
+  const shuffle = useCallback(() => {
+    if (gameState !== GAME_STATES.PLAYING) return;
+    setItems(prev => shuffleArray(prev));
+  }, [gameState]);
+
   const handleFail = useCallback(async (finalMistakes) => {
     try {
       const result = await revealAllGroups(puzzle.puzzle_date);
@@ -200,18 +240,40 @@ export function usePuzzle(date = null) {
     if (selectedIds.length !== MAX_SELECTED || !puzzle) return;
     if (gameState !== GAME_STATES.PLAYING) return;
 
+    // The same wrong set again costs nothing: no request, no mistake, no
+    // history entry. Only wrong sets can repeat (a correct set leaves the
+    // grid).
+    if (isRepeatGuess(guessHistory, selectedIds)) {
+      haptic('tap');
+      showToast('Already guessed!', 'repeat', TOAST_MS.repeat);
+      return;
+    }
+
     setGameState(GAME_STATES.SUBMITTED);
+    // A fresh guess replaces any toast still up from the last one.
+    clearTimeout(toastTimerRef.current);
+    setToast(null);
 
     try {
       const result = await submitGuess(puzzle.puzzle_date, selectedIds);
       setGuessHistory(prev => [...prev, { ids: [...selectedIds], correct: result.correct }]);
 
       if (result.correct) {
+        haptic('success');
         const newSolvedGroups = [...solvedGroups, result.group];
+        const solvedItemIds = new Set(result.group.items.map(i => i.id));
+
+        // Collapse the four tiles together first, then swap them for the
+        // group bar. The board stays locked (SUBMITTED) for the animation.
+        const collapseMs = reducedMotion() ? 0 : SOLVE_COLLAPSE_MS;
+        if (collapseMs > 0) {
+          setSolving({ ids: [...solvedItemIds], color: result.group.color });
+          await new Promise(r => setTimeout(r, collapseMs));
+        }
+        setSolving(null);
         setSolvedGroups(newSolvedGroups);
 
         // Remove solved items from the grid
-        const solvedItemIds = new Set(result.group.items.map(i => i.id));
         setItems(prev => prev.filter(item => !solvedItemIds.has(item.id)));
         setSelectedIds([]);
 
@@ -238,29 +300,33 @@ export function usePuzzle(date = null) {
 
         setGameState(GAME_STATES.PLAYING);
       } else {
-        // Wrong guess
+        // Wrong guess. The selection stays, so "One away" can be fixed by
+        // swapping a single tile instead of rebuilding the set.
+        haptic('fail');
         setWrongIds([...selectedIds]);
         setOneAway(!!result.one_away);
+        if (result.one_away) showToast('One away!', 'oneAway', TOAST_MS.oneAway);
         const newMistakes = mistakes + 1;
         setMistakes(newMistakes);
+        const final = newMistakes >= MAX_MISTAKES;
 
         setTimeout(() => {
           setWrongIds([]);
           setOneAway(false);
-          setSelectedIds([]);
 
-          if (newMistakes >= MAX_MISTAKES) {
+          if (final) {
+            setSelectedIds([]);
             handleFail(newMistakes);
           } else {
             setGameState(GAME_STATES.PLAYING);
           }
-        }, result.one_away ? 1500 : 500);
+        }, final && result.one_away ? 1500 : WRONG_LOCK_MS);
       }
     } catch (err) {
       console.error('Submit error:', err);
       setGameState(GAME_STATES.PLAYING);
     }
-  }, [selectedIds, puzzle, gameState, solvedGroups, mistakes, handleFail]);
+  }, [selectedIds, puzzle, gameState, solvedGroups, mistakes, guessHistory, handleFail, showToast]);
 
   const deselectAll = useCallback(() => {
     setSelectedIds([]);
@@ -276,14 +342,20 @@ export function usePuzzle(date = null) {
     gameState,
     wrongIds,
     oneAway,
+    toast,
+    solving,
     loading,
     error,
     toggleTile,
     submitSelection,
     deselectAll,
+    setSelection,
+    shuffle,
     isComplete: gameState === GAME_STATES.COMPLETE,
     isFailed: gameState === GAME_STATES.FAILED,
     isPlaying: gameState === GAME_STATES.PLAYING,
+    // A guess is in flight (or its shake / solve animation is running).
+    isSubmitting: gameState === GAME_STATES.SUBMITTED,
     canSubmit: selectedIds.length === MAX_SELECTED && gameState === GAME_STATES.PLAYING,
   };
 }

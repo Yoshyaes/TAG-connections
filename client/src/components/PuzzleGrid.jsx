@@ -7,7 +7,7 @@ import ResultsModal from './ResultsModal';
 import RulesModal from './RulesModal';
 import Header from './Header';
 import { usePuzzle } from '../hooks/usePuzzle';
-import { haptic, applyDragSelect, isTouchInput } from '../lib/touch';
+import { haptic, applyDragSelect, isTouchInput, juicePop, startCoach, coachSeen, COACH_KEY } from '../lib/touch';
 
 const RULES_SEEN_KEY = 'tag_connections_seen_rules';
 const TIER_BG = {
@@ -166,6 +166,60 @@ function useSolveCollapse(gridRef, solving) {
   }, [gridRef, solving]);
 }
 
+/**
+ * Success beat (Phase 3): when a group is solved in play, the new group bar
+ * pops (kit juice.pop: scale + flash, flash only under reduced motion). The
+ * success haptic already fired in-gesture when the answer came back, so the
+ * pop is visual only. Groups restored from a saved game, and the reveal of
+ * every group after a loss, do not pop.
+ */
+function useSolvePop(rootRef, { count, loading, isFailed }) {
+  const prevRef = useRef(null);
+  useEffect(() => {
+    if (loading) { prevRef.current = null; return; }
+    const prev = prevRef.current;
+    prevRef.current = count;
+    if (prev === null || isFailed || count !== prev + 1) return;
+    const root = rootRef.current;
+    const bars = root ? root.querySelectorAll('[data-group-bar]') : [];
+    if (bars.length) juicePop(bars[bars.length - 1]);
+  }, [rootRef, count, loading, isFailed]);
+}
+
+/**
+ * First 20 seconds (Phase 3): on a first visit by touch, a ghost hand shows
+ * the drag-select stroke across the top row, then points at Submit. Kit 1.1
+ * coach only (no-op on 1.0.0 / no kit); it never blocks input (the overlay
+ * is pointer-events:none), shows once per device (key connections-v1), and
+ * waits for the rules sheet to close. Started at most once per mount.
+ */
+function useFirstVisitCoach(gridRef, { ready }) {
+  const startedRef = useRef(false);
+  const handleRef = useRef(null);
+  useEffect(() => {
+    if (!ready || startedRef.current) return;
+    if (!isTouchInput() || coachSeen(COACH_KEY)) return;
+    const grid = gridRef.current;
+    const tiles = grid ? grid.querySelectorAll('[data-tile-id]') : [];
+    if (tiles.length < 3) return;
+    startedRef.current = true;
+    const a = tiles[0].getBoundingClientRect();
+    const c = tiles[2].getBoundingClientRect();
+    const distance = Math.max(60, Math.round((c.left + c.width / 2) - (a.left + a.width / 2)));
+    handleRef.current = startCoach({
+      key: COACH_KEY,
+      delay: 700,
+      steps: [
+        { target: tiles[0], gesture: 'drag', dir: 'right', distance, text: 'Drag across tiles to pick them' },
+        { target: '#tag-connections-root .tag-action-primary', gesture: 'tap', text: 'Pick 4 that belong together, then Submit' },
+      ],
+    });
+  }, [gridRef, ready]);
+  useEffect(() => () => {
+    if (handleRef.current) handleRef.current.stop();
+  }, []);
+}
+
 function msUntilNextEstMidnight() {
   const now = new Date();
   const nowEst = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
@@ -221,6 +275,7 @@ export default function PuzzleGrid({ date = null }) {
   const [showRules, setShowRules] = useState(false);
   const countdown = useNextPuzzleCountdown();
   const gridRef = useRef(null);
+  const rootRef = useRef(null);
 
   // A light tick on every tap-toggle, fired inside the click / pointerup so
   // iOS allows it.
@@ -231,6 +286,17 @@ export default function PuzzleGrid({ date = null }) {
 
   useDragSelect(gridRef, { enabled: isPlaying, selectedIds, items, setSelection, onTap: onToggle });
   useSolveCollapse(gridRef, solving);
+  useSolvePop(rootRef, { count: solvedGroups.length, loading, isFailed });
+  useFirstVisitCoach(gridRef, { ready: isPlaying && !showRules && !showResults && items.length >= 4 });
+  // Deselect All and Submit tick in-gesture like the tiles (Shuffle taps).
+  const onDeselectAll = useCallback(() => {
+    haptic('tick');
+    deselectAll();
+  }, [deselectAll]);
+  const onSubmit = useCallback(() => {
+    haptic('tick');
+    submitSelection();
+  }, [submitSelection]);
   const onShuffle = useCallback(() => {
     haptic('tap');
     shuffle();
@@ -304,7 +370,7 @@ export default function PuzzleGrid({ date = null }) {
   }
 
   return (
-    <div className="w-full flex flex-col items-center gap-3">
+    <div ref={rootRef} className="w-full flex flex-col items-center gap-3">
       {/* Header with puzzle info */}
       <Header
         puzzleNumber={puzzle?.id}
@@ -316,7 +382,9 @@ export default function PuzzleGrid({ date = null }) {
 
       {/* Solved groups */}
       {solvedGroups.map((group, i) => (
-        <GroupReveal key={group.id} group={group} index={i} />
+        <div key={group.id} className="w-full" data-group-bar="">
+          <GroupReveal group={group} index={i} />
+        </div>
       ))}
 
       {/* Tile grid. The toast ("One away!", "Already guessed!") floats over
@@ -375,8 +443,8 @@ export default function PuzzleGrid({ date = null }) {
           </button>
           <button
             type="button"
-            onClick={deselectAll}
-            disabled={!isPlaying}
+            onClick={onDeselectAll}
+            disabled={!isPlaying || selectedIds.length === 0}
             className="tag-action-btn px-4 rounded-tile text-[14px] font-semibold transition-all duration-150"
             style={{
               backgroundColor: 'transparent',
@@ -388,7 +456,7 @@ export default function PuzzleGrid({ date = null }) {
           </button>
           <button
             type="button"
-            onClick={submitSelection}
+            onClick={onSubmit}
             disabled={!canSubmit}
             className="tag-action-btn tag-action-primary px-6 rounded-tile text-[14px] font-semibold transition-all duration-150"
             style={{

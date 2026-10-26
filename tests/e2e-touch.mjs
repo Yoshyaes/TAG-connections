@@ -18,6 +18,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const DIST = join(ROOT, 'dist');
 const KIT = resolve(ROOT, '../../_shared/touch-kit');
+// Kit 1.0.0 (what prod has until the 1.1.0 deploy): no coach / juice / success.
+const KIT10 = process.env.KIT10 || 'C:/Users/soon2/AppData/Local/Temp/claude/c--Users-soon2-Documents-TAG-Wordpress-Website/672e6ee8-8972-415d-8ad3-7b743afecb52/scratchpad/touchfix/orig/tag-arcade-touch.js';
 const PW_DIR = process.env.PLAYWRIGHT_DIR || resolve(ROOT, '../../../scripts/arcade/node_modules/playwright');
 const { chromium } = await import(pathToFileURL(join(PW_DIR, 'index.mjs')).href);
 
@@ -29,9 +31,9 @@ const distIndex = readFileSync(join(DIST, 'index.html'), 'utf8');
 const JS = distIndex.match(/\/assets\/(index-[^"']+\.js)/)[1];
 const CSS = distIndex.match(/\/assets\/(index-[^"']+\.css)/)[1];
 
-function harness(withKit) {
+function harness(withKit, kitDir = 'kit') {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-${withKit ? '<link rel="stylesheet" href="/kit/tag-arcade-touch.css"><script>window.tagArcade={registerPause(){}};</script><script src="/kit/tag-arcade-touch.js"></script>' : '<script>window.tagArcade={registerPause(){}};</script>'}
+${withKit ? `<link rel="stylesheet" href="/kit/tag-arcade-touch.css"><script>window.tagArcade={registerPause(){}};</script><script src="/${kitDir}/tag-arcade-touch.js"></script>` : '<script>window.tagArcade={registerPause(){}};</script>'}
 <link rel="stylesheet" href="/assets/${CSS}">
 <style>body{margin:0;background:#0F0F14;font-family:system-ui} .filler{height:1600px;color:#555;padding:16px}</style>
 <script>window.tagConnections={apiUrl:'/wp-json/tag-connections/v1',nonce:'x',userId:0,isAdmin:false,mode:'game'};</script>
@@ -44,11 +46,12 @@ ${withKit ? '<link rel="stylesheet" href="/kit/tag-arcade-touch.css"><script>win
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html' };
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
-  if (url.pathname === '/' || url.pathname === '/nokit') {
+  if (url.pathname === '/' || url.pathname === '/nokit' || url.pathname === '/kit10') {
     res.writeHead(200, { 'content-type': 'text/html' });
-    return res.end(harness(url.pathname === '/'));
+    return res.end(url.pathname === '/kit10' ? harness(true, 'kit10') : harness(url.pathname === '/'));
   }
   let file = null;
+  if (url.pathname === '/kit10/tag-arcade-touch.js') file = KIT10;
   if (url.pathname.startsWith('/assets/')) file = join(DIST, url.pathname);
   if (url.pathname.startsWith('/kit/')) file = join(KIT, url.pathname.slice(5));
   if (file && existsSync(file)) {
@@ -122,7 +125,8 @@ async function hapticLog(page) {
   return page.evaluate(() => window.__haptics || []);
 }
 
-async function touchRun(browser, { w, h, kit, tag }) {
+async function touchRun(browser, { w, h, kit, kit10 = false, tag }) {
+  const kit11 = kit && !kit10;
   const ctx = await browser.newContext({
     viewport: { width: w, height: h }, hasTouch: true, isMobile: true, deviceScaleFactor: 2,
     userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36',
@@ -132,9 +136,17 @@ async function touchRun(browser, { w, h, kit, tag }) {
       localStorage.setItem('tag_connections_seen_rules', '1');
       // A saved in-progress game in id order, so tile positions are known:
       // row 1 = 1-4, row 2 = 5-8 (the game resumes saved order as-is).
-      localStorage.setItem('tag_connections_2026-10-25', JSON.stringify({ items, selectedIds: [], solvedGroups: [], mistakes: 0, guessHistory: [], gameState: 'PLAYING' }));
+      // Seeded once per tab, so a reload restores whatever the run left.
+      if (!sessionStorage.getItem('__seeded')) {
+        sessionStorage.setItem('__seeded', '1');
+        localStorage.setItem('tag_connections_2026-10-25', JSON.stringify({ items, selectedIds: [], solvedGroups: [], mistakes: 0, guessHistory: [], gameState: 'PLAYING' }));
+      }
     } catch (e) { /* */ }
     window.__haptics = [];
+    window.__track = [];
+    window.__pops = 0;
+    // The site analytics hook the kit sends through (GA4 + PostHog on prod).
+    window.tagArcadeTrack = (name, params) => { window.__track.push({ name, params }); };
     // Record what the kit is asked to play (vibrate itself is a no-op headless).
     const hook = () => {
       const ta = window.tagArcade;
@@ -144,6 +156,10 @@ async function touchRun(browser, { w, h, kit, tag }) {
         Object.assign(wrapped, orig, { __wrapped: true });
         ta.haptic = wrapped;
       }
+      if (ta && ta.juice && typeof ta.juice.pop === 'function' && !ta.juice.pop.__wrapped) {
+        const op = ta.juice.pop;
+        ta.juice.pop = Object.assign(function (el) { if (el && el.hasAttribute && el.hasAttribute('data-group-bar')) window.__pops++; return op.apply(this, arguments); }, { __wrapped: true });
+      }
     };
     document.addEventListener('DOMContentLoaded', hook);
   }, ITEMS);
@@ -151,12 +167,20 @@ async function touchRun(browser, { w, h, kit, tag }) {
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await mockApi(page);
-  await page.goto(BASE + (kit ? '/' : '/nokit'));
+  await page.goto(BASE + (kit10 ? '/kit10' : kit ? '/' : '/nokit'));
   await page.waitForSelector(tileSel(1));
   const cdp = await ctx.newCDPSession(page);
   const T = s => `[${tag}] ${s}`;
 
   check(T('kit detected as expected'), (await page.evaluate(() => typeof (window.tagArcade && window.tagArcade.haptic) === 'function')) === kit);
+  if (kit) {
+    const ver = await page.evaluate(() => window.tagArcade.touchKit);
+    check(T('kit version'), ver === (kit10 ? '1.0.0' : '1.1.0'), String(ver));
+  }
+  const coachTip = () => page.evaluate(() => { const t = document.querySelector('.tag-coach-tip'); return t ? t.textContent : null; });
+  const tracked = (name) => page.evaluate((n) => window.__track.filter(e => e.name === n).map(e => e.params), name);
+  // Deselect All is visibly disabled until something is selected (touch-lint dead tap).
+  const deselState = () => page.$eval('.tag-action-btn >> nth=1', e => ({ dis: e.disabled, op: getComputedStyle(e).opacity }));
 
   // Scroll the board into view the way a player would.
   await page.locator('#tag-connections-root').scrollIntoViewIfNeeded();
@@ -173,9 +197,24 @@ async function touchRun(browser, { w, h, kit, tag }) {
   check(T('no horizontal overflow'), pageW <= w, `${pageW} > ${w}`);
   await shot(page, `${tag}-01-board`);
 
+  const ds0 = await deselState();
+  check(T('Deselect All disabled + dimmed with nothing selected'), ds0.dis && +ds0.op < 0.75, JSON.stringify(ds0));
+  // First 20 seconds: the ghost-hand coach (kit 1.1 only), shown once, never blocking.
+  await page.waitForTimeout(900);
+  if (kit11) {
+    check(T('coach shows on first touch visit (drag step)'), /Drag across tiles/.test((await coachTip()) || ''), String(await coachTip()));
+    check(T('coach overlay is pointer-events:none'), await page.$eval('.tag-coach', e => getComputedStyle(e).pointerEvents === 'none'));
+    await shot(page, `${tag}-00-coach`);
+  } else {
+    check(T('no coach without kit 1.1'), (await page.$('.tag-coach')) === null);
+  }
+
   // Tap to toggle on and off.
   await page.tap(tileSel(1));
-  check(T('tap selects'), JSON.stringify(await selectedIds(page)) === '[1]');
+  check(T('tap selects (coach does not block)'), JSON.stringify(await selectedIds(page)) === '[1]');
+  await page.waitForTimeout(250);
+  const ds1 = await deselState();
+  check(T('Deselect All enabled once a tile is selected'), !ds1.dis && +ds1.op === 1, JSON.stringify(ds1));
   await page.tap(tileSel(1));
   check(T('tap again deselects'), JSON.stringify(await selectedIds(page)) === '[]');
   // Sticky hover: the deselected tile must be back to the base color.
@@ -199,6 +238,10 @@ async function touchRun(browser, { w, h, kit, tag }) {
   const dragSel = await selectedIds(page);
   check(T('drag selects every tile it crosses'), JSON.stringify(dragSel) === JSON.stringify([g1[0], g1[1], g1[2], off].sort((a, b) => a - b)), JSON.stringify(dragSel));
   check(T('drag on the grid does not scroll the page'), Math.abs((await page.evaluate(() => window.scrollY)) - scrollBefore) < 2);
+  if (kit11) {
+    await page.waitForTimeout(300);
+    check(T('coach advances to Submit after the drag'), /Submit/.test((await coachTip()) || ''), String(await coachTip()));
+  }
   await shot(page, `${tag}-02-drag-selected`);
 
   if (process.env.DEBUG) await page.evaluate(() => { window.__ev = []; ['pointerdown','pointerup','pointercancel','click','touchend'].forEach(t => document.addEventListener(t, e => window.__ev.push(t + ':' + (e.pointerId ?? '') + ':' + Math.round(performance.now()) + ':' + (e.target.closest && e.target.closest('[data-tile-id]') ? e.target.closest('[data-tile-id]').getAttribute('data-tile-id') : e.target.tagName)), true)); });
@@ -214,6 +257,10 @@ async function touchRun(browser, { w, h, kit, tag }) {
   // One-away wrong guess: grid must not move, selection kept, mistake spent.
   const gridY = await page.$eval('.tag-grid', e => e.getBoundingClientRect().top + window.scrollY);
   await page.tap('.tag-action-primary');
+  if (kit11) {
+    check(T('coach finishes on Submit and is saved'), (await page.$('.tag-coach')) === null
+      && await page.evaluate(() => !!JSON.parse(localStorage.getItem('tag_arcade_coach_v1') || '{}')['connections-v1']));
+  }
   await page.waitForSelector('.tag-toast');
   const toastText = await page.textContent('.tag-toast');
   check(T('One away! toast shown'), toastText.trim() === 'One away!', toastText);
@@ -249,6 +296,14 @@ async function touchRun(browser, { w, h, kit, tag }) {
   await page.waitForTimeout(600);
   check(T('solve: group bar shown, 12 tiles left'), (await page.$$eval('[data-tile-id]', e => e.length)) === 12);
   if (kit) check(T('solve haptic (success)'), (await hapticLog(page)).includes('success'), JSON.stringify(await hapticLog(page)));
+  if (kit11) {
+    check(T('solve pops the new group bar (juice.pop)'), (await page.evaluate(() => window.__pops)) === 1, String(await page.evaluate(() => window.__pops)));
+    const fs = await tracked('arcade_first_success_ms');
+    check(T('arcade_first_success_ms fired once, label first_group'), fs.length === 1 && fs[0].label === 'first_group' && !!fs[0].game, JSON.stringify(fs));
+    check(T('no round_complete before the puzzle ends'), (await tracked('arcade_round_complete')).length === 0);
+  } else {
+    check(T('no telemetry events without kit 1.1'), (await tracked('arcade_first_success_ms')).length === 0);
+  }
   await shot(page, `${tag}-06-solved`);
 
   // Shuffle keeps the selection.
@@ -271,32 +326,59 @@ async function touchRun(browser, { w, h, kit, tag }) {
   const s1 = await page.evaluate(() => window.scrollY);
   check(T('page still scrolls when the swipe starts outside the grid'), s1 > s0 + 50, `${s0} -> ${s1}`);
 
+  // Finish the puzzle: arcade_round_complete once, result solved.
+  await page.tap('.tag-action-btn >> text=Deselect All');
+  check(T('Deselect All clears, then disables itself'), (await selectedIds(page)).length === 0 && (await deselState()).dis);
+  for (const g of [2, 3, 4]) {
+    for (let k = 1; k <= 4; k++) await page.tap(tileSel((g - 1) * 4 + k));
+    await page.tap('.tag-action-primary');
+    await page.waitForFunction((n) => document.querySelectorAll('[data-group-bar]').length === n, g, { timeout: 4000 });
+    await page.waitForTimeout(150);
+  }
+  await page.waitForTimeout(300);
+  if (kit11) {
+    const rc = await tracked('arcade_round_complete');
+    check(T('arcade_round_complete once on solve (explicit, solved, 1 mistake)'), rc.length === 1 && rc[0].via === 'explicit' && rc[0].result === 'solved' && rc[0].mistakes === 1 && rc[0].mode === 'daily', JSON.stringify(rc));
+    check(T('first_success still sent only once'), (await tracked('arcade_first_success_ms')).length === 1);
+    check(T('each live solve popped (4 pops)'), (await page.evaluate(() => window.__pops)) === 4, String(await page.evaluate(() => window.__pops)));
+  }
+  // Reload: the coach is a one-time thing, and restored groups do not pop.
+  await page.reload();
+  await page.waitForSelector('[data-group-bar]');
+  await page.waitForTimeout(1000);
+  check(T('coach does not show again after a reload'), (await page.$('.tag-coach')) === null);
+  if (kit11) check(T('restored groups do not pop / re-report'), (await page.evaluate(() => window.__pops)) === 0 && (await tracked('arcade_round_complete')).length === 0);
+
   check(T('no page errors'), errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
 
-async function desktopRun(browser) {
+async function desktopRun(browser, { kit = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => { try { localStorage.setItem('tag_connections_seen_rules', '1'); } catch (e) { /* */ } });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await mockApi(page);
-  await page.goto(BASE + '/nokit');
+  await page.goto(BASE + (kit ? '/' : '/nokit'));
   await page.waitForSelector(tileSel(1));
-  const T = s => `[desktop] ${s}`;
+  const T = s => `[desktop${kit ? '+kit' : ''}] ${s}`;
+  await page.waitForTimeout(1000);
+  check(T('no coach for mouse users'), (await page.$('.tag-coach')) === null);
+  check(T('Deselect All disabled with nothing selected'), await page.$eval('.tag-action-btn >> nth=1', e => e.disabled));
 
   await page.click(tileSel(1));
   check(T('click selects'), JSON.stringify(await selectedIds(page)) === '[1]');
   // A mouse drag across tiles does NOT select (desktop unchanged).
   const a = await center(page, tileSel(2)), b = await center(page, tileSel(3));
   const order = await page.$$eval('[data-tile-id]', els => els.map(e => +e.getAttribute('data-tile-id')));
-  const pa = await center(page, tileSel(order[1])), pb = await center(page, tileSel(order[2]));
+  const others = order.filter(id => id !== 1);
+  const pa = await center(page, tileSel(others[0])), pb = await center(page, tileSel(others[1]));
   void a; void b;
   await page.mouse.move(pa.x, pa.y); await page.mouse.down();
   await page.mouse.move(pb.x, pb.y, { steps: 8 }); await page.mouse.up();
   const sel = await selectedIds(page);
-  check(T('mouse drag does not drag-select'), !sel.includes(order[2]), JSON.stringify(sel));
+  check(T('mouse drag does not drag-select'), !sel.includes(others[0]) && !sel.includes(others[1]), JSON.stringify(sel));
   // Hover still lights an unselected tile on a real hover device.
   await page.mouse.move(0, 0);
   const free = order.find(id => !sel.includes(id));
@@ -315,7 +397,7 @@ async function desktopRun(browser) {
   check(T('Enter toggles the focused tile'), (await selectedIds(page)).includes(+ring.id));
   const btns = await page.$$eval('.tag-action-btn', els => els.map(e => e.getBoundingClientRect().height));
   check(T('buttons >= 44px on desktop too'), btns.every(h => h >= 44), JSON.stringify(btns));
-  await shot(page, 'desktop-01');
+  await shot(page, kit ? 'desktop-kit-01' : 'desktop-01');
   check(T('no page errors'), errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
@@ -326,7 +408,9 @@ try {
   await touchRun(browser, { w: 844, h: 390, kit: true, tag: 'kit-844x390' });
   await touchRun(browser, { w: 360, h: 740, kit: true, tag: 'kit-360x740' });
   await touchRun(browser, { w: 390, h: 844, kit: false, tag: 'nokit-390x844' });
+  await touchRun(browser, { w: 390, h: 844, kit: true, kit10: true, tag: 'kit10-390x844' });
   await desktopRun(browser);
+  await desktopRun(browser, { kit: true });
 } finally {
   await browser.close();
   server.close();

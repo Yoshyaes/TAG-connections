@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { guessKey, isRepeatGuess, applyDragSelect, haptic, isTouchInput } from '../lib/touch';
+import { guessKey, isRepeatGuess, applyDragSelect, haptic, isTouchInput, juicePop, trackSuccess, trackRoundComplete, startCoach, coachSeen, COACH_KEY } from '../lib/touch';
 
 afterEach(() => {
   delete window.tagArcade;
@@ -52,5 +52,38 @@ describe('kit bridge', () => {
     expect(isTouchInput()).toBe(true);
     window.tagArcade.inputMode = 'mouse';
     expect(isTouchInput()).toBe(false);
+  });
+});
+
+describe('Phase 3 bridge (kit 1.1 juice / telemetry / coach)', () => {
+  it('is a no-op on kit 1.0.0 (haptic only, no juice/success/coach)', () => {
+    window.tagArcade = { haptic: () => true, inputMode: 'touch' };
+    expect(juicePop(document.createElement('div'))).toBe(false);
+    expect(trackSuccess('first_group')).toBe(false);
+    expect(trackRoundComplete({ result: 'solved' })).toBe(false);
+    expect(startCoach({ steps: [{}] })).toBe(null);
+    expect(coachSeen()).toBe(true);
+  });
+
+  it('forwards to kit 1.1, pop without its own haptic', () => {
+    const pop = vi.fn(() => true), success = vi.fn(() => true), rc = vi.fn(() => true);
+    const handle = { stop() {} };
+    const coach = Object.assign(vi.fn(() => handle), { seen: vi.fn(() => false) });
+    window.tagArcade = { haptic: () => true, juice: { pop }, success, roundComplete: rc, coach };
+    const el = document.createElement('div');
+    expect(juicePop(el)).toBe(true);
+    expect(pop).toHaveBeenCalledWith(el, { haptic: false });
+    expect(trackSuccess('first_group')).toBe(true);
+    expect(success).toHaveBeenCalledWith('first_group');
+    trackRoundComplete({ result: 'failed', mistakes: 4 });
+    expect(rc).toHaveBeenCalledWith({ result: 'failed', mistakes: 4 });
+    expect(coachSeen()).toBe(false);
+    expect(coach.seen).toHaveBeenCalledWith(COACH_KEY);
+    expect(startCoach({ key: COACH_KEY, steps: [] })).toBe(handle);
+  });
+
+  it('swallows kit errors', () => {
+    window.tagArcade = { haptic: () => true, success() { throw new Error('x'); } };
+    expect(trackSuccess('a')).toBe(false);
   });
 });

@@ -7,7 +7,7 @@ import {
   completePuzzle,
   isLoggedIn,
 } from '../lib/api';
-import { haptic, reducedMotion, isRepeatGuess } from '../lib/touch';
+import { haptic, reducedMotion, isRepeatGuess, trackSuccess, trackRoundComplete } from '../lib/touch';
 
 const GAME_STATES = {
   IDLE: 'IDLE',
@@ -260,6 +260,9 @@ export function usePuzzle(date = null) {
 
       if (result.correct) {
         haptic('success');
+        // Telemetry: the first group solved is this game's first success
+        // (the kit sends only the first call on a page).
+        trackSuccess('first_group');
         const newSolvedGroups = [...solvedGroups, result.group];
         const solvedItemIds = new Set(result.group.items.map(i => i.id));
 
@@ -280,6 +283,7 @@ export function usePuzzle(date = null) {
         // Check win condition
         if (newSolvedGroups.length === (puzzle.group_count || 4)) {
           setGameState(GAME_STATES.COMPLETE);
+          trackRoundComplete({ result: 'solved', mistakes, mode: date ? 'archive' : 'daily' });
 
           const solveTime = startTimeRef.current
             ? Math.round((elapsedRef.current + Date.now() - startTimeRef.current) / 1000)
@@ -316,6 +320,7 @@ export function usePuzzle(date = null) {
 
           if (final) {
             setSelectedIds([]);
+            trackRoundComplete({ result: 'failed', mistakes: newMistakes, mode: date ? 'archive' : 'daily' });
             handleFail(newMistakes);
           } else {
             setGameState(GAME_STATES.PLAYING);
@@ -326,7 +331,7 @@ export function usePuzzle(date = null) {
       console.error('Submit error:', err);
       setGameState(GAME_STATES.PLAYING);
     }
-  }, [selectedIds, puzzle, gameState, solvedGroups, mistakes, guessHistory, handleFail, showToast]);
+  }, [selectedIds, puzzle, gameState, solvedGroups, mistakes, guessHistory, handleFail, showToast, date]);
 
   const deselectAll = useCallback(() => {
     setSelectedIds([]);

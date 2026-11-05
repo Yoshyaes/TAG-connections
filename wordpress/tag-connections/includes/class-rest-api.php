@@ -131,6 +131,38 @@ class TAG_Connections_REST_API {
         return current_user_can('manage_options');
     }
 
+    /**
+     * Security 2026-11-05: who may see a given date. Future puzzles are
+     * admin-only (they were fetchable by anyone); past dates are the Pro
+     * archive. Returns WP_Error or true.
+     */
+    private static function date_access($date) {
+        $today = current_time('Y-m-d');
+        if ($date > $today && !current_user_can('manage_options')) {
+            return new WP_Error('not_found', 'No puzzle found for this date', ['status' => 404]);
+        }
+        if ($date < $today && function_exists('tag_arcade_user_can_play') && !tag_arcade_user_can_play('pro')) {
+            return new WP_Error('pro_required', 'The Connections archive is a Pro feature. Upgrade to play past puzzles.', [
+                'status' => 403,
+                'upgrade_url' => function_exists('home_url') ? home_url('/pricing/') : null,
+            ]);
+        }
+        return true;
+    }
+
+    private static function miss_key($user_id, $date) {
+        return 'tag_conn_miss_' . (int) $user_id . '_' . $date;
+    }
+
+    private static function has_result($user_id, $date) {
+        global $wpdb;
+        return (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT 1 FROM {$wpdb->prefix}tag_results WHERE user_id = %d AND puzzle_date = %s LIMIT 1",
+            $user_id,
+            $date
+        ));
+    }
+
     // =========================================================
     // Game endpoints
     // =========================================================
@@ -196,6 +228,9 @@ class TAG_Connections_REST_API {
         // future dates remain free. Falls open if tag-membership isn't loaded
         // (e.g. plugin deactivated) so the game keeps working in isolation.
         $today = current_time('Y-m-d');
+        if ($date > $today && !current_user_can('manage_options')) {
+            return new WP_Error('not_found', 'No puzzle found for this date', ['status' => 404]);
+        }
         if ($date < $today && function_exists('tag_arcade_user_can_play')) {
             if (!tag_arcade_user_can_play('pro')) {
                 return new WP_Error(
@@ -290,7 +325,21 @@ class TAG_Connections_REST_API {
             ]);
         }
 
-        return rest_ensure_response(['correct' => false]);
+        // Near miss: exactly 3 of the 4 picks share a group. The client has
+        // shown a "One away!" toast for this since the playtest fix, but the
+        // endpoint never sent the flag, so the toast could not appear. Only
+        // a boolean is returned; which tile is the odd one stays server-side.
+        $counts = array_count_values(array_map('strval', $group_ids));
+        $one_away = max($counts) === 3;
+
+        // Server-side miss count, so /puzzle/reveal can require a real loss.
+        $uid = get_current_user_id();
+        if ($uid > 0) {
+            $mk = self::miss_key($uid, $puzzle_date);
+            set_transient($mk, (int) get_transient($mk) + 1, 2 * DAY_IN_SECONDS);
+        }
+
+        return rest_ensure_response(['correct' => false, 'one_away' => $one_away]);
     }
 
     public static function reveal_all_groups($request) {
@@ -302,6 +351,20 @@ class TAG_Connections_REST_API {
 
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $puzzle_date)) {
             return new WP_Error('invalid', 'Invalid date format', ['status' => 400]);
+        }
+
+        // Reveal hands over every answer, so it is only for a player who has
+        // actually lost this puzzle (4 server-counted misses) or already has
+        // a stored result for it, and only for dates they may play.
+        $access = self::date_access($puzzle_date);
+        if (is_wp_error($access)) {
+            return $access;
+        }
+        $uid = get_current_user_id();
+        if (!current_user_can('manage_options')
+            && (int) get_transient(self::miss_key($uid, $puzzle_date)) < 4
+            && !self::has_result($uid, $puzzle_date)) {
+            return new WP_Error('forbidden', 'Finish the puzzle first.', ['status' => 403]);
         }
 
         $puzzle = TAG_Connections_Database::get_puzzle_by_date($puzzle_date);
@@ -345,12 +408,22 @@ class TAG_Connections_REST_API {
 
         $puzzle_date = sanitize_text_field($params['puzzle_date'] ?? '');
         $solved = (bool)($params['solved'] ?? false);
-        $mistakes = (int)($params['mistakes'] ?? 0);
-        $solve_time_secs = isset($params['solve_time_secs']) ? (int)$params['solve_time_secs'] : null;
+        // Clamp client-supplied values (negative mistakes/time topped the board).
+        $mistakes = max(0, min(4, (int)($params['mistakes'] ?? 0)));
+        $solve_time_secs = isset($params['solve_time_secs']) ? max(0, min(DAY_IN_SECONDS, (int)$params['solve_time_secs'])) : null;
         $groups_order = $params['groups_order'] ?? [];
+        $groups_order = is_array($groups_order)
+            ? array_slice(array_values(array_filter($groups_order, 'is_scalar')), 0, 4)
+            : [];
+        $groups_order = array_map(static function ($g) { return substr((string) $g, 0, 64); }, $groups_order);
 
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $puzzle_date)) {
             return new WP_Error('invalid', 'Invalid date format', ['status' => 400]);
+        }
+
+        $access = self::date_access($puzzle_date);
+        if (is_wp_error($access)) {
+            return $access;
         }
 
         // Verify puzzle exists before saving result

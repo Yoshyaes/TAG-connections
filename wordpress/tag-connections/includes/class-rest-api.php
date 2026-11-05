@@ -150,6 +150,47 @@ class TAG_Connections_REST_API {
         return true;
     }
 
+    /**
+     * Security 2026-11-05: stored item ids follow the groups (1-4 group A,
+     * 5-8 B...), so handing them out leaked every answer. Players only ever
+     * see opaque ids from a keyed per-puzzle permutation. Returns
+     * [stored_id => public_id].
+     */
+    private static function id_map($puzzle) {
+        $items = json_decode($puzzle->items, true);
+        if (!is_array($items)) return [];
+        // Puzzles up to the cutover keep their stored ids, so games already in
+        // progress (saved in the browser by id) are not broken mid-day.
+        if ((string) $puzzle->puzzle_date < '2026-11-06') {
+            $same = [];
+            foreach ($items as $item) { $same[(int) $item['id']] = (int) $item['id']; }
+            return $same;
+        }
+        $seed = hash_hmac('sha256', 'tag-conn-ids|' . $puzzle->puzzle_date . '|' . $puzzle->id, wp_salt('auth'));
+        $order = [];
+        foreach ($items as $item) {
+            $orig = (int) $item['id'];
+            $order[$orig] = hash_hmac('sha256', (string) $orig, $seed);
+        }
+        asort($order);
+        $map = [];
+        $n = 0;
+        foreach (array_keys($order) as $orig) {
+            $map[$orig] = 101 + $n++;
+        }
+        return $map;
+    }
+
+    private static function public_items($items, $map) {
+        $out = [];
+        foreach ($items as $item) {
+            $orig = (int) $item['id'];
+            $out[] = ['id' => $map[$orig] ?? $orig, 'text' => $item['text']];
+        }
+        usort($out, function ($a, $b) { return $a['id'] <=> $b['id']; });
+        return $out;
+    }
+
     private static function miss_key($user_id, $date) {
         return 'tag_conn_miss_' . (int) $user_id . '_' . $date;
     }
@@ -271,12 +312,22 @@ class TAG_Connections_REST_API {
 
         $selected_ids = array_map('intval', $selected_ids);
 
+        // Same date rules as reveal: no future puzzles, archive is Pro.
+        $access = self::date_access($puzzle_date);
+        if (is_wp_error($access)) {
+            return $access;
+        }
+
         $puzzle = TAG_Connections_Database::get_puzzle_by_date($puzzle_date);
         if (!$puzzle) {
             return new WP_Error('not_found', 'No puzzle found', ['status' => 404]);
         }
 
         $items = json_decode($puzzle->items, true);
+        // Translate the player's opaque ids back to stored ids.
+        $id_map = self::id_map($puzzle);
+        $to_stored = array_flip($id_map);
+        $selected_ids = array_map(function ($pid) use ($to_stored) { return $to_stored[$pid] ?? -1; }, $selected_ids);
         $groups = json_decode($puzzle->groups_data, true);
 
         if (!is_array($items) || !is_array($groups)) {
@@ -309,7 +360,7 @@ class TAG_Connections_REST_API {
             $group_items = [];
             foreach ($items as $item) {
                 if ($item['group_id'] === $target_group_id) {
-                    $group_items[] = ['id' => (int)$item['id'], 'text' => $item['text']];
+                    $group_items[] = ['id' => $id_map[(int)$item['id']] ?? (int)$item['id'], 'text' => $item['text']];
                 }
             }
 
@@ -374,6 +425,7 @@ class TAG_Connections_REST_API {
 
         $items = json_decode($puzzle->items, true);
         $groups = json_decode($puzzle->groups_data, true);
+        $id_map = self::id_map($puzzle);
 
         if (!is_array($items) || !is_array($groups)) {
             return new WP_Error('server_error', 'Invalid puzzle data', ['status' => 500]);
@@ -384,7 +436,7 @@ class TAG_Connections_REST_API {
             $group_items = [];
             foreach ($items as $item) {
                 if ($item['group_id'] === $group['id']) {
-                    $group_items[] = ['id' => (int)$item['id'], 'text' => $item['text']];
+                    $group_items[] = ['id' => $id_map[(int)$item['id']] ?? (int)$item['id'], 'text' => $item['text']];
                 }
             }
             $result_groups[] = [
@@ -644,10 +696,8 @@ class TAG_Connections_REST_API {
             return ['id' => (int)$puzzle->id, 'puzzle_date' => $puzzle->puzzle_date, 'title' => $puzzle->title, 'items' => [], 'group_count' => 0];
         }
 
-        // Strip group_id from items
-        $safe_items = array_map(function($item) {
-            return ['id' => (int)$item['id'], 'text' => $item['text']];
-        }, $items);
+        // Strip group_id from items, and hand out opaque ids in a shuffled order.
+        $safe_items = self::public_items($items, self::id_map($puzzle));
 
         return [
             'id' => (int)$puzzle->id,

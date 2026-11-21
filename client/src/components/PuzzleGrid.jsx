@@ -336,7 +336,7 @@ export default function PuzzleGrid({ date = null }) {
 
   if (error) {
     const isProGated = error.code === 'pro_required' || error.status === 403;
-    const upgradeUrl = error.data?.upgrade_url || '/pricing/';
+    const upgradeUrl = error.data?.upgrade_url || '/founding/';
     return (
       <div className="w-full flex flex-col items-center justify-center py-20 gap-4 text-center max-w-md mx-auto">
         {isProGated ? (

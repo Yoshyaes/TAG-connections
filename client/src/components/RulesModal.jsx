@@ -66,7 +66,7 @@ export default function RulesModal({ onClose, touch = false }) {
             className="text-[12px] text-center"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Categories can overlap on purpose &mdash; the fun is figuring out
+            Categories can overlap on purpose: the fun is figuring out
             which group an item actually belongs to.
           </p>
 

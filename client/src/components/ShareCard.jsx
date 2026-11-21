@@ -165,7 +165,7 @@ export default function ShareCard({ puzzle, solvedGroups, mistakes, guessHistory
       </div>
       {copyState === 'error' && (
         <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-          Couldn't copy automatically — select the text above and copy it manually.
+          Couldn't copy automatically. Select the text above and copy it manually.
         </p>
       )}
 

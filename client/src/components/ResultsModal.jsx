@@ -94,7 +94,7 @@ export default function ResultsModal({ puzzle, solvedGroups, mistakes, guessHist
             >
               {solved
                 ? `Solved with ${mistakes} mistake${mistakes !== 1 ? 's' : ''}`
-                : `${mistakes} mistakes — better luck tomorrow!`}
+                : `${mistakes} mistakes. Better luck tomorrow!`}
             </p>
           </div>
 

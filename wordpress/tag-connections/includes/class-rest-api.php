@@ -144,7 +144,7 @@ class TAG_Connections_REST_API {
         if ($date < $today && function_exists('tag_arcade_user_can_play') && !tag_arcade_user_can_play('pro')) {
             return new WP_Error('pro_required', 'The Connections archive is a Pro feature. Upgrade to play past puzzles.', [
                 'status' => 403,
-                'upgrade_url' => function_exists('home_url') ? home_url('/pricing/') : null,
+                'upgrade_url' => function_exists('home_url') ? home_url('/founding/') : null,
             ]);
         }
         return true;
@@ -258,7 +258,7 @@ class TAG_Connections_REST_API {
         return rest_ensure_response([
             'entries'      => $entries,
             'pro_required' => !$can_play_past,
-            'upgrade_url'  => function_exists('home_url') ? home_url('/pricing/') : null,
+            'upgrade_url'  => function_exists('home_url') ? home_url('/founding/') : null,
         ]);
     }
 
@@ -279,7 +279,7 @@ class TAG_Connections_REST_API {
                     'The Connections archive is a Pro feature. Upgrade to play past puzzles.',
                     [
                         'status'      => 403,
-                        'upgrade_url' => function_exists('home_url') ? home_url('/pricing/') : null,
+                        'upgrade_url' => function_exists('home_url') ? home_url('/founding/') : null,
                     ]
                 );
             }

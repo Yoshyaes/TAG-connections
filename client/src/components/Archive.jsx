@@ -78,7 +78,7 @@ export default function Archive() {
             </span>
           </div>
           <a
-            href={upgradeUrl || '/pricing/'}
+            href={upgradeUrl || '/founding/'}
             className="px-4 py-2 rounded-tile text-[13px] font-semibold"
             style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--text-primary)' }}
           >

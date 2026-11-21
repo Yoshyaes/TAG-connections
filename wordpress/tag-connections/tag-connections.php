@@ -3,7 +3,7 @@
  * Plugin Name: TAG Connections
  * Plugin URI: https://twoaveragegamers.com
  * Description: A daily gaming-themed puzzle game. Sort 16 items into 4 secret categories!
- * Version: 1.0.0
+ * Version: 1.1.1
  * Author: Two Average Gamers
  * License: GPL v2 or later
  * Text Domain: tag-connections
@@ -11,7 +11,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('TAG_CONNECTIONS_VERSION', '1.0.0');
+define('TAG_CONNECTIONS_VERSION', '1.1.1');
 define('TAG_CONNECTIONS_PATH', plugin_dir_path(__FILE__));
 define('TAG_CONNECTIONS_URL', plugin_dir_url(__FILE__));
 
@@ -62,6 +62,9 @@ add_action('plugins_loaded', function () {
         'pro_features'   => ['archive'],
         'stat_renderer'  => 'tag_connections_arcade_stats',
         'featured'       => true,
+        'genre'          => 'quiz',
+        'duration'       => '~3 min',
+        'cta_label'      => "Play today's puzzle",
     ]);
 }, 20);
 
@@ -106,11 +109,30 @@ function tag_connections_shortcode($atts) {
     $js_file = '';
     $css_file = '';
 
-    if (is_dir($dist_dir)) {
-        foreach (scandir($dist_dir) as $file) {
-            if (preg_match('/^index-.*\.js$/', $file)) $js_file = $file;
-            if (preg_match('/^index-.*\.css$/', $file)) $css_file = $file;
+    // The Vite build's own index.html names the current entry bundle. Read
+    // that first, so an old hashed bundle can stay in dist/assets/ (for any
+    // cached page HTML that still points at it) without being picked up.
+    // Falls back to the old scan, where the alphabetically last match wins.
+    $manifest = TAG_CONNECTIONS_PATH . 'dist/index.html';
+    if (is_readable($manifest)) {
+        $html = (string) file_get_contents($manifest);
+        if (preg_match('#/assets/(index-[A-Za-z0-9_-]+\.js)#', $html, $m) && is_file($dist_dir . $m[1])) {
+            $js_file = $m[1];
         }
+        if (preg_match('#/assets/(index-[A-Za-z0-9_-]+\.css)#', $html, $m) && is_file($dist_dir . $m[1])) {
+            $css_file = $m[1];
+        }
+    }
+
+    if (is_dir($dist_dir) && (!$js_file || !$css_file)) {
+        $js_scan = '';
+        $css_scan = '';
+        foreach (scandir($dist_dir) as $file) {
+            if (preg_match('/^index-.*\.js$/', $file)) $js_scan = $file;
+            if (preg_match('/^index-.*\.css$/', $file)) $css_scan = $file;
+        }
+        if (!$js_file) $js_file = $js_scan;
+        if (!$css_file) $css_file = $css_scan;
     }
 
     if ($css_file) {
@@ -137,12 +159,9 @@ function tag_connections_shortcode($atts) {
             'nonce'   => wp_create_nonce('wp_rest'),
             'userId'  => get_current_user_id(),
             'isAdmin' => current_user_can('manage_options'),
-            // NOTE: no 'mode' key. One was localized here for a long time and the
-            // bundle never read it — the real switch is a data-mode attribute on
-            // #tag-connections-root, which the admin build checks. Shipping a
-            // config key nothing reads invites someone to "fix" the wrong thing.
+            'mode'    => 'game',
         ]);
     }
 
-    return '<div id="tag-connections-root" style="max-width: 480px; margin: 0 auto;"></div>';
+    return '<div id="tag-connections-root" style="max-width: 600px; margin: 0 auto;"></div>';
 }
